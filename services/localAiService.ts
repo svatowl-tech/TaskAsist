@@ -1,8 +1,4 @@
 
-// Dynamic import from CDN to avoid build steps constraints in this env
-// In a real project: npm install @mlc-ai/web-llm
-import * as WebLLM from "https://esm.sh/@mlc-ai/web-llm@0.2.61";
-
 export class LocalAiService {
   private static engine: any = null;
   private static initProgressCallback: ((progress: any) => void) | null = null;
@@ -24,6 +20,10 @@ export class LocalAiService {
 
     try {
       if (onProgress) onProgress("Initializing WebGPU...");
+      
+      // Dynamic import to bypass build-time resolution of URL imports by tsc
+      // @ts-ignore
+      const WebLLM = await import("https://esm.sh/@mlc-ai/web-llm@0.2.61");
       
       this.engine = await WebLLM.CreateMLCEngine(
         modelId,

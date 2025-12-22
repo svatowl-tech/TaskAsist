@@ -36,7 +36,8 @@ class LRUCache<K, V> {
     if (this.map.has(key)) {
       this.map.delete(key);
     } else if (this.map.size >= this.capacity) {
-      this.map.delete(this.map.keys().next().value);
+      // Assert non-null because size > 0 guarantees at least one key
+      this.map.delete(this.map.keys().next().value!);
     }
     this.map.set(key, value);
   }

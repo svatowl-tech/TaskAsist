@@ -17,6 +17,19 @@ interface TaskModalProps {
   aiModel?: string;
 }
 
+interface TaskFormData {
+  title: string;
+  description: string;
+  status: TaskStatus;
+  tags: string;
+  assignee: string;
+  eventType: string;
+  color: string;
+  recurrence: string;
+  estimatedDuration: number;
+  dependencies: string[];
+}
+
 export const TaskModal: React.FC<TaskModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -27,7 +40,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   openRouterApiKey,
   aiModel
 }) => {
-  const [formData, setFormData] = useState<any>({
+  const [formData, setFormData] = useState<TaskFormData>({
     title: '',
     description: '',
     status: initialStatus,
@@ -37,7 +50,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     color: '#3182CE',
     recurrence: 'none',
     estimatedDuration: 0,
-    dependencies: [] as string[]
+    dependencies: []
   });
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -62,6 +75,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
              description: taskToEdit.description || '',
              status: taskToEdit.status,
              tags: taskToEdit.tags.join(', '),
+             assignee: taskToEdit.assignee || '',
              color: taskToEdit.color || '#3182CE',
              recurrence: taskToEdit.recurrence || 'none',
              eventType: taskToEdit.eventType || 'task',
@@ -85,8 +99,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         status: formData.status,
         tags: tagsArray,
         color: formData.color,
-        eventType: formData.eventType,
-        recurrence: formData.recurrence,
+        eventType: formData.eventType as any,
+        recurrence: formData.recurrence as any,
         estimatedDuration: Number(formData.estimatedDuration),
         dependencies: formData.dependencies
     });
@@ -157,7 +171,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <label className="block text-sm font-medium text-text-muted">Статус</label>
               <select
                 value={formData.status}
-                onChange={e => setFormData({...formData, status: e.target.value})}
+                onChange={e => setFormData({...formData, status: e.target.value as TaskStatus})}
                 className="input-field"
               >
                 <option value="backlog">Бэклог</option>
@@ -171,7 +185,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                <input
                  type="number"
                  value={formData.estimatedDuration}
-                 onChange={e => setFormData({...formData, estimatedDuration: e.target.value})}
+                 onChange={e => setFormData({...formData, estimatedDuration: Number(e.target.value)})}
                  className="input-field"
                  placeholder="Напр. 60"
                />
