@@ -1,0 +1,5 @@
+{
+  "name": "Personal Task Manager",
+  "description": "An offline-first Progressive Web App for managing tasks and notes using IndexedDB.",
+  "requestFramePermissions": []
+}

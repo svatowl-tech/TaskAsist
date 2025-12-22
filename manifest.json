@@ -1,0 +1,55 @@
+
+{
+  "short_name": "TaskAssist",
+  "name": "Личный менеджер задач",
+  "icons": [
+    {
+      "src": "https://picsum.photos/192/192",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://picsum.photos/512/512",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "minimal-ui"],
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
+  "orientation": "portrait-primary",
+  "protocol_handlers": [
+    {
+      "protocol": "web+taskassist",
+      "url": "/?action=%s"
+    }
+  ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "shortcuts": [
+    {
+      "name": "Новая задача",
+      "short_name": "Создать",
+      "description": "Создать новую задачу",
+      "url": "/?action=new_task",
+      "icons": [{ "src": "https://picsum.photos/96/96", "sizes": "96x96" }]
+    },
+    {
+      "name": "Утренняя сводка",
+      "short_name": "Сводка",
+      "description": "Показать сводку от ИИ",
+      "url": "/?action=briefing",
+      "icons": [{ "src": "https://picsum.photos/96/96", "sizes": "96x96" }]
+    }
+  ]
+}
