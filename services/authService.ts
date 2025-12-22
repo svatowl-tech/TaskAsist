@@ -1,11 +1,21 @@
 
 import { User, AuthProvider } from '../types';
 
-// TODO: Replace with your actual Client IDs from Google Cloud Console and Yandex OAuth
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
-const YANDEX_CLIENT_ID = 'YOUR_YANDEX_CLIENT_ID';
+// Используем переменные окружения Vite.
+// Для локальной разработки создайте файл .env в корне: VITE_GOOGLE_CLIENT_ID=ваш_ид
+// Для Vercel добавьте это в Settings -> Environment Variables
+const GOOGLE_CLIENT_ID = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '';
+const YANDEX_CLIENT_ID = (import.meta as any).env?.VITE_YANDEX_CLIENT_ID || '';
 
-const REDIRECT_URI = window.location.origin; // e.g., http://localhost:3000
+const REDIRECT_URI = window.location.origin; // Автоматически: http://localhost:3000 или https://ваш-проект.vercel.app
+
+const LOCAL_USER_MOCK: User = {
+  id: 'guest-user-01',
+  name: 'Гость',
+  email: 'local@taskassist.app',
+  avatar: 'https://ui-avatars.com/api/?name=Guest&background=3182CE&color=fff',
+  provider: 'local'
+};
 
 export class AuthService {
   static getToken(): string | null {
@@ -24,79 +34,100 @@ export class AuthService {
   }
 
   static login(provider: AuthProvider) {
+    // 1. Handle Local/Guest Login
+    if (provider === 'local') {
+      sessionStorage.setItem('auth_token', 'mock_guest_token');
+      sessionStorage.setItem('auth_provider', 'local');
+      window.location.reload();
+      return;
+    }
+
+    // 2. Check for Missing Configuration
+    if (provider === 'google' && !GOOGLE_CLIENT_ID) {
+      alert("Ошибка конфигурации: VITE_GOOGLE_CLIENT_ID не найден.\n\nДобавьте Client ID в переменные окружения Vercel или файл .env для локальной работы.");
+      return;
+    }
+    
+    if (provider === 'yandex' && !YANDEX_CLIENT_ID) {
+      alert("Ошибка конфигурации: VITE_YANDEX_CLIENT_ID не найден.");
+      return;
+    }
+
+    // 3. Perform OAuth Redirect
     let url = '';
     const state = crypto.randomUUID();
     sessionStorage.setItem('auth_state', state);
 
     if (provider === 'google') {
+      // Scopes: Drive AppData (hidden folder), Profile, Email
       const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email');
       url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=token&scope=${scope}&state=${state}&prompt=select_account`;
     } else if (provider === 'yandex') {
       url = `https://oauth.yandex.com/authorize?response_type=token&client_id=${YANDEX_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&state=${state}`;
     }
 
-    window.location.href = url;
+    if (url) window.location.href = url;
   }
 
   static handleCallback(): { token: string; provider: AuthProvider } | null {
     const hash = window.location.hash.substring(1);
     const params = new URLSearchParams(hash);
     const accessToken = params.get('access_token');
-    const state = params.get('state');
-
-    // Simple state check (in production, verify strictly)
-    const storedState = sessionStorage.getItem('auth_state');
     
     if (accessToken) {
-      // Determine provider based on what we initiated or infer (simplified here)
-      // Since Yandex/Google callbacks look similar, we assume the user knows what they clicked 
-      // or we rely on the fact that we clear session storage on init.
-      // A better way is checking the 'issuer' or trying an API call.
-      
-      // Heuristic: If we are here, we save the token.
       sessionStorage.setItem('auth_token', accessToken);
-      
-      // Clean URL
+      // Clean URL hash
       window.history.replaceState(null, '', window.location.pathname);
-      return { token: accessToken, provider: 'google' }; // Defaulting type return, actual provider set in fetchProfile
+      return { token: accessToken, provider: 'google' }; // Default assumption, updated by fetchProfile
     }
     return null;
   }
 
   static async fetchUserProfile(token: string): Promise<User | null> {
-    try {
-      // Try Google First
-      const googleResp = await fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+    const storedProvider = sessionStorage.getItem('auth_provider');
 
-      if (googleResp.ok) {
-        const data = await googleResp.json();
-        sessionStorage.setItem('auth_provider', 'google');
-        return {
-          id: data.id,
-          name: data.name,
-          email: data.email,
-          avatar: data.picture,
-          provider: 'google'
-        };
+    // Handle Local Guest
+    if (storedProvider === 'local' || token === 'mock_guest_token') {
+      return LOCAL_USER_MOCK;
+    }
+
+    try {
+      // Try Google First (if provider is google or unknown)
+      if (!storedProvider || storedProvider === 'google') {
+        const googleResp = await fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (googleResp.ok) {
+          const data = await googleResp.json();
+          sessionStorage.setItem('auth_provider', 'google');
+          return {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            avatar: data.picture,
+            provider: 'google'
+          };
+        }
       }
 
       // Try Yandex
-      const yandexResp = await fetch('https://login.yandex.ru/info?format=json', {
-        headers: { Authorization: `OAuth ${token}` }
-      });
+      if (!storedProvider || storedProvider === 'yandex') {
+        const yandexResp = await fetch('https://login.yandex.ru/info?format=json', {
+          headers: { Authorization: `OAuth ${token}` }
+        });
 
-      if (yandexResp.ok) {
-        const data = await yandexResp.json();
-        sessionStorage.setItem('auth_provider', 'yandex');
-        return {
-          id: data.id,
-          name: data.real_name || data.display_name,
-          email: data.default_email,
-          avatar: `https://avatars.yandex.net/get-yapic/${data.default_avatar_id}/islands-200`,
-          provider: 'yandex'
-        };
+        if (yandexResp.ok) {
+          const data = await yandexResp.json();
+          sessionStorage.setItem('auth_provider', 'yandex');
+          return {
+            id: data.id,
+            name: data.real_name || data.display_name,
+            email: data.default_email,
+            avatar: `https://avatars.yandex.net/get-yapic/${data.default_avatar_id}/islands-200`,
+            provider: 'yandex'
+          };
+        }
       }
     } catch (e) {
       console.error("Failed to fetch profile", e);

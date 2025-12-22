@@ -197,7 +197,12 @@ export const Layout: React.FC<LayoutProps> = ({
               </div>
             </div>
           ) : (
-             <button onClick={() => AuthService.login('google')} className="w-full btn-secondary text-xs h-9">Войти</button>
+             <button 
+               onClick={() => AuthService.login('local')} 
+               className="w-full btn-secondary text-xs h-9 border-primary/30 text-primary hover:bg-primary/5"
+             >
+               Войти как Гость
+             </button>
           )}
         </div>
       </aside>

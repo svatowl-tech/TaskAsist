@@ -139,6 +139,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <div>
                     <p className="font-medium text-lg">{user.name}</p>
                     <p className="text-sm text-text-muted">{user.email || user.provider}</p>
+                    {user.provider === 'local' && <span className="text-xs bg-gray-200 text-gray-700 px-2 rounded">Локальный профиль</span>}
                   </div>
                 </div>
                 <button onClick={onLogout} className="btn-secondary text-error border-error/30 hover:bg-error/5">
@@ -147,9 +148,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                 <button onClick={() => AuthService.login('google')} className="btn-primary w-full justify-center">
+                 <button onClick={() => AuthService.login('google')} className="btn-primary w-full justify-center opacity-70">
                    Войти через Google Drive
                  </button>
+                 <button onClick={() => AuthService.login('local')} className="btn-secondary w-full justify-center">
+                   Войти как Гость (Локально)
+                 </button>
+                 <p className="text-xs text-text-muted text-center mt-2">
+                   * Для Google Drive требуется настройка API ключей в коде. Режим "Гость" работает сразу.
+                 </p>
               </div>
             )}
           </section>
