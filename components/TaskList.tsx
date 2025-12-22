@@ -7,22 +7,27 @@ interface TaskListProps {
   onAdd: (title: string) => Promise<void>;
   onToggle: (id: string, completed: boolean) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onEdit: (task: Task) => void;
 }
 
 interface SwipeableTaskItemProps {
   task: Task;
   onToggle: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
+  onEdit: (task: Task) => void;
 }
 
 const SwipeableTaskItem: React.FC<SwipeableTaskItemProps> = ({ 
   task, 
   onToggle, 
-  onDelete 
+  onDelete,
+  onEdit
 }) => {
   const [offset, setOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState<{x: number, y: number} | null>(null);
+  
   const startX = useRef(0);
   const timerRef = useRef<number | null>(null);
 
@@ -31,10 +36,11 @@ const SwipeableTaskItem: React.FC<SwipeableTaskItemProps> = ({
     startX.current = e.touches[0].clientX;
     setIsDragging(true);
 
-    // Long Press Detection
+    // Long Press Detection (Mobile)
     timerRef.current = window.setTimeout(() => {
        setIsDragging(false); // Cancel swipe
        if (navigator.vibrate) navigator.vibrate(50);
+       setMenuPos(null); // Center menu for touch
        setShowContextMenu(true);
     }, 600); // 600ms long press
   };
@@ -62,6 +68,19 @@ const SwipeableTaskItem: React.FC<SwipeableTaskItemProps> = ({
     setOffset(0);
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setIsDragging(false);
+    setMenuPos({ x: e.clientX, y: e.clientY });
+    setShowContextMenu(true);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(task.title);
+    setShowContextMenu(false);
+  };
+
   const bgStyle = offset > 0 ? 'bg-success' : offset < 0 ? 'bg-error' : 'bg-transparent';
 
   return (
@@ -70,16 +89,22 @@ const SwipeableTaskItem: React.FC<SwipeableTaskItemProps> = ({
       {showContextMenu && (
         <>
           <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[1px]" onClick={() => setShowContextMenu(false)}></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-bg-surface border border-border rounded-lg shadow-xl w-48 p-2 animate-in fade-in zoom-in-95">
-             <button onClick={() => { onToggle(task.id, !task.completed); setShowContextMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-panel rounded">
+          <div 
+            className={`z-50 bg-bg-surface border border-border rounded-lg shadow-xl w-48 p-2 animate-in fade-in zoom-in-95 ${menuPos ? 'fixed' : 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'}`}
+            style={menuPos ? { top: menuPos.y, left: menuPos.x } : {}}
+          >
+             <button onClick={() => { onToggle(task.id, !task.completed); setShowContextMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-panel rounded text-text-main">
                {task.completed ? 'Вернуть в работу' : 'Завершить'}
              </button>
-             <button onClick={() => { /* Edit logic would go here if props allowed */ setShowContextMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-panel rounded">
-               Редактировать
+             <button onClick={() => { onEdit(task); setShowContextMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-panel rounded text-text-main">
+               ✏️ Редактировать
+             </button>
+             <button onClick={handleCopy} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-panel rounded text-text-main">
+               📋 Копировать
              </button>
              <div className="h-px bg-border my-1"></div>
              <button onClick={() => { onDelete(task.id); setShowContextMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-error hover:bg-error/10 rounded">
-               Удалить
+               🗑 Удалить
              </button>
           </div>
         </>
@@ -94,8 +119,9 @@ const SwipeableTaskItem: React.FC<SwipeableTaskItemProps> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onContextMenu={handleContextMenu}
         style={{ transform: `translateX(${offset}px)`, transition: isDragging ? 'none' : 'transform 0.2s ease-out' }}
-        className="relative bg-bg-surface p-4 border border-border rounded-card shadow-card active:shadow-card-hover hover:shadow-card-hover transition-shadow h-full flex items-center"
+        className="relative bg-bg-surface p-4 border border-border rounded-card shadow-card active:shadow-card-hover hover:shadow-card-hover transition-shadow h-full flex items-center group"
       >
         <button
           onClick={(e) => { e.stopPropagation(); onToggle(task.id, !task.completed); }}
@@ -105,7 +131,7 @@ const SwipeableTaskItem: React.FC<SwipeableTaskItemProps> = ({
           {task.completed && <span className="text-xs font-bold">✓</span>}
         </button>
         
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0" onDoubleClick={() => onEdit(task)}>
           <span className={`block font-medium text-text-main ${task.completed ? 'text-text-disabled line-through' : ''}`}>
             {task.title}
           </span>
@@ -119,12 +145,20 @@ const SwipeableTaskItem: React.FC<SwipeableTaskItemProps> = ({
             </div>
           )}
         </div>
+
+        {/* Desktop generic menu trigger hint or simple edit button */}
+        <button 
+          onClick={(e) => { e.stopPropagation(); onEdit(task); }}
+          className="ml-2 p-2 text-text-muted hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity hidden lg:block"
+        >
+          ✏️
+        </button>
       </div>
     </div>
   );
 };
 
-export const TaskList: React.FC<TaskListProps> = ({ tasks, onAdd, onToggle, onDelete }) => {
+export const TaskList: React.FC<TaskListProps> = ({ tasks, onAdd, onToggle, onDelete, onEdit }) => {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   
   const activeTasks = tasks.filter(t => !t.completed);
@@ -175,7 +209,8 @@ export const TaskList: React.FC<TaskListProps> = ({ tasks, onAdd, onToggle, onDe
                 key={task.id} 
                 task={task} 
                 onToggle={onToggle} 
-                onDelete={onDelete} 
+                onDelete={onDelete}
+                onEdit={onEdit}
               />
             ))}
           </div>
@@ -192,7 +227,8 @@ export const TaskList: React.FC<TaskListProps> = ({ tasks, onAdd, onToggle, onDe
                   key={task.id} 
                   task={task} 
                   onToggle={onToggle} 
-                  onDelete={onDelete} 
+                  onDelete={onDelete}
+                  onEdit={onEdit}
                 />
               ))}
             </div>
