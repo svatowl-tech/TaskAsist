@@ -590,6 +590,7 @@ const App: React.FC = () => {
                 onTaskClick={(t) => { setEditingTask(t); setIsModalOpen(true); }}
                 onMoveTask={handleMoveTask}
                 onAddClick={(s) => { setInitialModalStatus(s); setIsModalOpen(true); }}
+                onDelete={handleDeleteTask}
               />
             </div>
           )}

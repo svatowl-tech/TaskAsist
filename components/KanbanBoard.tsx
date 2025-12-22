@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Task, TaskStatus } from '../types';
 
 interface KanbanBoardProps {
@@ -7,6 +7,7 @@ interface KanbanBoardProps {
   onTaskClick: (task: Task) => void;
   onMoveTask: (taskId: string, newStatus: TaskStatus) => void;
   onAddClick: (status: TaskStatus) => void;
+  onDelete: (id: string) => void;
 }
 
 const COLUMNS: { id: TaskStatus; label: string; bg: string }[] = [
@@ -20,17 +21,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tasks, 
   onTaskClick, 
   onMoveTask,
-  onAddClick
+  onAddClick,
+  onDelete
 }) => {
   const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
   
-  const ghostRef = useRef<HTMLDivElement | null>(null);
-  const dragItemRef = useRef<Task | null>(null);
-
   const handleDragStart = (e: React.DragEvent, task: Task) => {
     e.dataTransfer.setData('text/plain', task.id);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setDragImage(e.currentTarget as Element, 20, 20);
+    // Optional: Custom drag image
   };
 
   const handleDragOver = (e: React.DragEvent, status: TaskStatus) => {
@@ -46,10 +46,48 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     if (taskId) onMoveTask(taskId, status);
   };
 
-  // Mobile DnD logic omitted for brevity, assumes same logic as before but with new classes
+  const handleContextMenu = (e: React.MouseEvent, task: Task) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, task });
+  };
+
+  const handleCopy = () => {
+    if (contextMenu) {
+      navigator.clipboard.writeText(contextMenu.task.title);
+      setContextMenu(null);
+    }
+  };
+
+  // Close menu on click outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
 
   return (
-    <div className="flex flex-col lg:flex-row h-full overflow-x-auto lg:overflow-hidden gap-4 pb-4 snap-x snap-mandatory">
+    <div className="flex flex-col lg:flex-row h-full overflow-x-auto lg:overflow-hidden gap-4 pb-4 snap-x snap-mandatory relative">
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          className="fixed z-50 bg-bg-surface border border-border rounded-lg shadow-xl w-48 p-2 animate-in fade-in zoom-in-95"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()} 
+        >
+           <button onClick={() => { onTaskClick(contextMenu.task); setContextMenu(null); }} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-panel rounded text-text-main">
+             ✏️ Редактировать
+           </button>
+           <button onClick={handleCopy} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-panel rounded text-text-main">
+             📋 Копировать текст
+           </button>
+           <div className="h-px bg-border my-1"></div>
+           <button onClick={() => { onDelete(contextMenu.task.id); setContextMenu(null); }} className="w-full text-left px-3 py-2 text-sm text-error hover:bg-error/10 rounded">
+             🗑 Удалить
+           </button>
+        </div>
+      )}
+
       {COLUMNS.map(column => {
         const columnTasks = tasks.filter(t => t.status === column.id);
         const isOver = dragOverCol === column.id;
@@ -90,7 +128,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, task)}
                   onClick={() => onTaskClick(task)}
-                  className="bg-bg-surface p-4 rounded-card shadow-card border border-border cursor-grab active:cursor-grabbing hover:shadow-card-hover transition-all group relative"
+                  onContextMenu={(e) => handleContextMenu(e, task)}
+                  className="bg-bg-surface p-4 rounded-card shadow-card border border-border cursor-grab active:cursor-grabbing hover:shadow-card-hover transition-all group relative select-none"
                 >
                   <div className="mb-2 font-medium text-sm text-text-main leading-snug">
                     {task.title}
