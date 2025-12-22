@@ -14,7 +14,7 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": "./index.html",
+  "start_url": ".",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "minimal-ui"],
   "theme_color": "#ffffff",
@@ -23,11 +23,11 @@
   "protocol_handlers": [
     {
       "protocol": "web+taskassist",
-      "url": "./?action=%s"
+      "url": "/?action=%s"
     }
   ],
   "share_target": {
-    "action": "./",
+    "action": "/",
     "method": "GET",
     "enctype": "application/x-www-form-urlencoded",
     "params": {
@@ -41,14 +41,14 @@
       "name": "Новая задача",
       "short_name": "Создать",
       "description": "Создать новую задачу",
-      "url": "./?action=new_task",
+      "url": "/?action=new_task",
       "icons": [{ "src": "https://picsum.photos/96/96", "sizes": "96x96" }]
     },
     {
       "name": "Утренняя сводка",
       "short_name": "Сводка",
       "description": "Показать сводку от ИИ",
-      "url": "./?action=briefing",
+      "url": "/?action=briefing",
       "icons": [{ "src": "https://picsum.photos/96/96", "sizes": "96x96" }]
     }
   ]

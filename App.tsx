@@ -579,7 +579,6 @@ const App: React.FC = () => {
                onAdd={async (t) => handleSaveTask({title: t, status: 'backlog'})} 
                onToggle={(id, c) => handleMoveTask(id, c ? 'done' : 'in-progress')}
                onDelete={handleDeleteTask}
-               onEdit={(task) => { setEditingTask(task); setIsModalOpen(true); }}
              />
           )}
 
@@ -590,7 +589,6 @@ const App: React.FC = () => {
                 onTaskClick={(t) => { setEditingTask(t); setIsModalOpen(true); }}
                 onMoveTask={handleMoveTask}
                 onAddClick={(s) => { setInitialModalStatus(s); setIsModalOpen(true); }}
-                onDelete={handleDeleteTask}
               />
             </div>
           )}
