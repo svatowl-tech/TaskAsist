@@ -91,13 +91,13 @@ export class AiService {
         type: "function",
         function: {
           name: "create_task",
-          description: "Создать новую задачу.",
+          description: "Создать одну новую задачу.",
           parameters: {
             type: "object",
             properties: {
               title: { type: "string" },
               description: { type: "string" },
-              due_date: { type: "string" },
+              due_date: { type: "string", description: "ISO date format YYYY-MM-DD" },
               status: { type: "string", enum: ["backlog", "in-progress", "done"] }
             },
             required: ["title"]
@@ -108,7 +108,7 @@ export class AiService {
         type: "function",
         function: {
           name: "create_note",
-          description: "Создать заметку.",
+          description: "Создать текстовую заметку.",
           parameters: {
             type: "object",
             properties: {
@@ -116,6 +116,37 @@ export class AiService {
               content: { type: "string" }
             },
             required: ["title", "content"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "create_project",
+          description: "Создать целый проект (доску) с колонками и списком задач. Используй это, когда пользователь просит спланировать что-то сложное (свадьбу, разработку, поездку).",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Название проекта/доски" },
+              columns: { 
+                type: "array", 
+                items: { type: "string" },
+                description: "Список названий колонок (статусов)" 
+              },
+              tasks: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    column: { type: "string", description: "Название колонки, куда поместить задачу" },
+                    description: { type: "string" }
+                  },
+                  required: ["title"]
+                }
+              }
+            },
+            required: ["title"]
           }
         }
       }
@@ -150,8 +181,12 @@ export class AiService {
 
     const systemMessage = {
       role: "system",
-      content: `Ты полезный Персональный Ассистент (Copilot).
-      Твоя цель: помогать управлять делами.
+      content: `Ты — интеллектуальный диспетчер задач TaskAssist.
+      Твоя главная цель — не просто болтать, а СОЗДАВАТЬ структуры данных (задачи, проекты, заметки) для пользователя.
+      
+      Если пользователь просит "Спланируй переезд" или "Создай проект сайта" — ОБЯЗАТЕЛЬНО используй функцию create_project.
+      Если пользователь просит "Напомни купить хлеб" — используй функцию create_task.
+      
       ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.
       
       КОНТЕКСТ:

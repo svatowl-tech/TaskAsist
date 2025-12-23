@@ -198,48 +198,50 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ appState, onUpdate
   };
 
   return (
-    <div className="p-4 space-y-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center no-print">
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Аналитика</h2>
-        <div className="flex gap-2">
-           <button 
-             onClick={handlePrintReport}
-             className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition text-sm"
-           >
-             🖨️ PDF Отчет
-           </button>
-        </div>
-      </div>
-
-      {prediction.estimatedDate && (
-         <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 flex items-center gap-3">
-            <span className="text-2xl">🔮</span>
-            <div>
-              <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">Прогноз завершения всех задач</p>
-              <p className="text-xs text-blue-600 dark:text-blue-400">
-                При текущем темпе вы закончите примерно <b>{prediction.estimatedDate.toLocaleDateString()}</b>.
-              </p>
-            </div>
-         </div>
-      )}
-
-      <div id="analytics-content" className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {widgets.map((widget) => (
-          <div
-            key={widget.id}
-            className={`
-              ${widget.w} bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 
-              flex flex-col
-            `}
-          >
-             <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-50 dark:border-gray-700/50">
-               <h3 className="font-semibold text-gray-700 dark:text-gray-200">{widget.title}</h3>
-             </div>
-             <div className="flex-1 min-h-[100px]">
-               {renderWidgetContent(widget.type)}
-             </div>
+    <div className="h-full overflow-y-auto p-4 lg:p-8">
+      <div className="space-y-6 max-w-7xl mx-auto">
+        <div className="flex justify-between items-center no-print">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Аналитика</h2>
+          <div className="flex gap-2">
+             <button 
+               onClick={handlePrintReport}
+               className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition text-sm"
+             >
+               🖨️ PDF Отчет
+             </button>
           </div>
-        ))}
+        </div>
+
+        {prediction.estimatedDate && (
+           <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 flex items-center gap-3">
+              <span className="text-2xl">🔮</span>
+              <div>
+                <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">Прогноз завершения всех задач</p>
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  При текущем темпе вы закончите примерно <b>{prediction.estimatedDate.toLocaleDateString()}</b>.
+                </p>
+              </div>
+           </div>
+        )}
+
+        <div id="analytics-content" className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-20">
+          {widgets.map((widget) => (
+            <div
+              key={widget.id}
+              className={`
+                ${widget.w} bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 
+                flex flex-col
+              `}
+            >
+               <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-50 dark:border-gray-700/50">
+                 <h3 className="font-semibold text-gray-700 dark:text-gray-200">{widget.title}</h3>
+               </div>
+               <div className="flex-1 min-h-[100px]">
+                 {renderWidgetContent(widget.type)}
+               </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

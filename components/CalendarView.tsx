@@ -198,9 +198,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, notes, onTask
     const monthDays = Array.from({ length: days }, (_, i) => i + 1);
 
     return (
-      <div className="bg-bg-surface rounded-card shadow-card border border-border overflow-hidden">
+      <div className="bg-bg-surface rounded-card shadow-card border border-border overflow-hidden flex flex-col h-full">
         {/* Days Header */}
-        <div className="grid grid-cols-7 bg-bg-panel border-b border-border">
+        <div className="grid grid-cols-7 bg-bg-panel border-b border-border flex-shrink-0">
           {DAYS.map(day => (
             <div key={day} className="py-2.5 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">
               {day}
@@ -209,7 +209,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, notes, onTask
         </div>
 
         {/* Grid */}
-        <div className="grid grid-cols-7 auto-rows-[minmax(100px,1fr)]">
+        <div className="grid grid-cols-7 auto-rows-fr flex-1 overflow-y-auto">
           {blanks.map(i => (
             <div key={`blank-${i}`} className="bg-bg-panel/30 border-b border-r border-border" />
           ))}
@@ -230,7 +230,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, notes, onTask
                 onDragLeave={() => setDragOverDate(null)}
                 onDrop={(e) => handleDrop(e, date)}
                 className={`
-                  p-1 border-b border-r border-border transition-colors cursor-pointer flex flex-col gap-1 overflow-hidden relative
+                  p-1 border-b border-r border-border transition-colors cursor-pointer flex flex-col gap-1 overflow-hidden relative min-h-[80px]
                   ${isOver ? 'bg-primary/20 ring-inset ring-2 ring-primary' : 'hover:bg-bg-panel'}
                   ${isToday ? 'bg-primary/5' : !isWorking ? 'bg-gray-100/50 dark:bg-gray-800/30' : ''}
                 `}
@@ -370,7 +370,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, notes, onTask
   };
 
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex flex-col h-full gap-4 p-4 lg:p-8 max-w-7xl mx-auto w-full">
       {/* Calendar Toolbar */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-bg-surface p-3 rounded-card shadow-card border border-border">
         <div className="flex items-center gap-2">

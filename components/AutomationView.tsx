@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
-import { AppState, AutomationRule, ProjectTemplate, Task } from '../types';
+import React from 'react';
+import { AppState, AutomationRule, ProjectTemplate, Task, Board, BoardColumn } from '../types';
 import { StorageService } from '../services/storageService';
-import { AutomationService } from '../services/automationService';
+import { appStore } from '../lib/store';
 
 interface AutomationViewProps {
   appState: AppState;
@@ -11,387 +11,220 @@ interface AutomationViewProps {
   onRefresh?: () => void;
 }
 
-// ... (Project Templates Array kept same as before, simplified for this snippet to focus on Editor)
-const DEFAULT_TEMPLATES: ProjectTemplate[] = [
+const TEMPLATES_LIBRARY: (ProjectTemplate & { category: string, color: string })[] = [
   {
-    id: 't_software',
-    name: '💻 Разработка ПО (Agile)',
-    description: 'Базовый процесс для разработки новой фичи',
+    id: 't_software_agile',
+    name: 'Разработка ПО (Agile)',
+    description: 'Стандартный процесс для Sprint: планирование, разработка, тесты.',
+    category: 'Работа',
+    color: 'bg-blue-500',
+    columns: ['Бэклог', 'В работе', 'Code Review', 'QA', 'Готово'],
     tasks: [
-      { title: 'Анализ требований и ТЗ', status: 'done', tags: ['dev', 'planning'] },
-      { title: 'Реализация API', status: 'backlog', tags: ['backend'] },
-      { title: 'Реализация UI', status: 'backlog', tags: ['frontend'] },
+      { title: 'Sprint Planning', status: 'done', tags: ['meeting'] },
+      { title: 'Настройка окружения', status: 'done', tags: ['devops'] },
+      { title: 'Реализация API', status: 'in-progress', tags: ['backend'] },
+      { title: 'Верстка компонентов', status: 'in-progress', tags: ['frontend'] },
+      { title: 'Написание тестов', status: 'backlog', tags: ['qa'] },
     ]
   },
   {
-    id: 't_marketing',
-    name: '🚀 Маркетинговая кампания',
-    description: 'Чек-лист запуска рекламной кампании',
+    id: 't_marketing_launch',
+    name: 'Запуск рекламной кампании',
+    description: 'Чек-лист для подготовки и запуска маркетинговой активности.',
+    category: 'Маркетинг',
+    color: 'bg-purple-500',
+    columns: ['Идеи', 'Контент', 'Настройка', 'Запущено', 'Аналитика'],
     tasks: [
-      { title: 'Определить целевую аудиторию', status: 'in-progress', tags: ['marketing'] },
-      { title: 'Подготовить креативы', status: 'backlog', tags: ['design'] },
+      { title: 'Определить целевую аудиторию', status: 'done', tags: ['strategy'] },
+      { title: 'Написать тексты объявлений', status: 'in-progress', tags: ['copywriting'] },
+      { title: 'Подготовить креативы (баннеры)', status: 'in-progress', tags: ['design'] },
+      { title: 'Настройка таргетинга', status: 'backlog', tags: ['ads'] },
+      { title: 'Сбор статистики (через неделю)', status: 'backlog', tags: ['analytics'] },
     ]
   },
   {
-    id: 't_geo',
-    name: '🌍 Гео-напоминания',
-    description: 'Шаблон правил для геолокации (требует настройки)',
-    tasks: [],
-    // This template doesn't create tasks, it's conceptually a ruleset starter
+    id: 't_personal_moving',
+    name: 'Переезд в новую квартиру',
+    description: 'Чтобы ничего не забыть и не сойти с ума при переезде.',
+    category: 'Личное',
+    color: 'bg-orange-500',
+    columns: ['Сделать до', 'Сбор вещей', 'В день переезда', 'Сделать после'],
+    tasks: [
+      { title: 'Найти коробки и скотч', status: 'done', tags: ['packing'] },
+      { title: 'Расторгнуть договор интернета', status: 'backlog', tags: ['docs'] },
+      { title: 'Собрать зимнюю одежду', status: 'backlog', tags: ['packing'] },
+      { title: 'Заказать грузчиков', status: 'backlog', tags: ['logistics'] },
+      { title: 'Помыть старую квартиру', status: 'backlog', tags: ['cleaning'] },
+    ]
+  },
+  {
+    id: 't_trip_planning',
+    name: 'Планирование отпуска',
+    description: 'Подготовка к путешествию: билеты, отели, маршруты.',
+    category: 'Путешествия',
+    color: 'bg-teal-500',
+    columns: ['To Do', 'Бронирование', 'Сборы', 'В поездке'],
+    tasks: [
+      { title: 'Выбрать даты и направление', status: 'done', tags: ['planning'] },
+      { title: 'Купить авиабилеты', status: 'backlog', tags: ['booking'] },
+      { title: 'Забронировать отель', status: 'backlog', tags: ['booking'] },
+      { title: 'Сделать страховку', status: 'backlog', tags: ['docs'] },
+      { title: 'Собрать аптечку', status: 'backlog', tags: ['packing'] },
+    ]
+  },
+  {
+    id: 't_website_launch',
+    name: 'Запуск веб-сайта',
+    description: 'Чек-лист перед релизом сайта в продакшн.',
+    category: 'Работа',
+    color: 'bg-indigo-500',
+    columns: ['Контент', 'SEO', 'Техническое', 'Релиз'],
+    tasks: [
+      { title: 'Проверить все ссылки (404)', status: 'backlog', tags: ['qa'] },
+      { title: 'Настроить мета-теги', status: 'backlog', tags: ['seo'] },
+      { title: 'Подключить Google Analytics', status: 'backlog', tags: ['analytics'] },
+      { title: 'Проверить мобильную версию', status: 'backlog', tags: ['qa'] },
+      { title: 'Настроить SSL сертификат', status: 'backlog', tags: ['devops'] },
+    ]
+  },
+  {
+    id: 't_onboarding',
+    name: 'Онбординг сотрудника',
+    description: 'План введения нового человека в команду.',
+    category: 'HR',
+    color: 'bg-pink-500',
+    columns: ['До выхода', 'День 1', 'Неделя 1', 'Месяц 1'],
+    tasks: [
+      { title: 'Подготовить рабочее место', status: 'backlog', tags: ['admin'] },
+      { title: 'Создать корпоративную почту', status: 'backlog', tags: ['it'] },
+      { title: 'Выдать доступы (Jira, Slack)', status: 'backlog', tags: ['it'] },
+      { title: 'Intro встреча с командой', status: 'backlog', tags: ['meeting'] },
+      { title: 'Постановка целей на ИС', status: 'backlog', tags: ['management'] },
+    ]
   }
 ];
 
 export const AutomationView: React.FC<AutomationViewProps> = ({ 
-  appState, 
-  onUpdateAutomations,
-  onUpdateTemplates,
-  onRefresh
+  onRefresh 
 }) => {
-  const [activeTab, setActiveTab] = useState<'editor' | 'library'>('editor');
   
-  // Editor State
-  const [editingRule, setEditingRule] = useState<Partial<AutomationRule>>({
-    name: 'Новое правило',
-    isActive: true,
-    trigger: { type: 'status_change', value: 'done' },
-    action: { type: 'add_tag', value: '' }
-  });
-  
-  // Simulation State
-  const [simulationResult, setSimulationResult] = useState<Task[] | null>(null);
+  const handleApplyTemplate = async (template: typeof TEMPLATES_LIBRARY[0]) => {
+    if(!confirm(`Создать новую доску "${template.name}" и заполнить её задачами?`)) return;
 
-  const saveRule = async () => {
-    if (!editingRule.name || !editingRule.action?.value) {
-      alert("Заполните имя и действие");
-      return;
-    }
+    // 1. Create Board
+    const boardId = crypto.randomUUID();
+    const columns: BoardColumn[] = (template.columns || ['To Do', 'Done']).map((title, i) => ({
+        id: title.toLowerCase().replace(/\s/g, '_') + '_' + Math.floor(Math.random()*1000),
+        title,
+        order: i
+    }));
 
-    const rule: AutomationRule = {
-      id: editingRule.id || crypto.randomUUID(),
-      name: editingRule.name!,
-      isActive: editingRule.isActive !== false,
-      trigger: editingRule.trigger as any,
-      action: editingRule.action as any,
-      lastRun: 0
+    const newBoard: Board = {
+        id: boardId,
+        title: template.name,
+        columns
     };
 
-    if (editingRule.id) {
-       // Update
-       const updated = appState.automations.map(r => r.id === rule.id ? rule : r);
-       onUpdateAutomations(updated);
-       await StorageService.addAutomation(rule);
-    } else {
-       // Create
-       onUpdateAutomations([...appState.automations, rule]);
-       await StorageService.addAutomation(rule);
-    }
+    await StorageService.saveBoard(newBoard);
+    appStore.updateBoard(newBoard);
+    appStore.setActiveBoard(boardId);
 
-    // Reset
-    setEditingRule({
-      name: 'Новое правило',
-      isActive: true,
-      trigger: { type: 'status_change', value: 'done' },
-      action: { type: 'add_tag', value: '' }
-    });
-    setSimulationResult(null);
-  };
-
-  const deleteRule = async (id: string) => {
-    if(confirm('Удалить правило?')) {
-        await StorageService.deleteAutomation(id);
-        onUpdateAutomations(appState.automations.filter(r => r.id !== id));
-        if (editingRule.id === id) {
-             setEditingRule({ name: 'Новое правило', isActive: true, trigger: { type: 'status_change', value: 'done' }, action: { type: 'add_tag', value: '' } });
-        }
-    }
-  };
-
-  const runSimulation = () => {
-    // Construct temp rule object
-    const ruleMock = {
-        ...editingRule,
-        id: 'temp',
-        isActive: true,
-    } as AutomationRule;
-
-    const affected = AutomationService.simulateRule(ruleMock, appState.tasks);
-    setSimulationResult(affected);
-  };
-  
-  const handleApplyTemplate = async (template: ProjectTemplate) => {
+    // 2. Create Tasks
     for (const t of template.tasks) {
+      // Find matching column ID based on index or name approximation, defaulting to first column
+      // Since template.tasks has a 'status' which is just a string key in the template definition,
+      // we map it to our newly created columns.
+      // Simple mapping: If template task status is 'backlog', try to find col 0.
+      
+      let targetColId = columns[0].id;
+      // Heuristic: try to map generic statuses to created columns
+      if (t.status === 'done') targetColId = columns[columns.length - 1].id;
+      if (t.status === 'in-progress' && columns.length > 2) targetColId = columns[1].id;
+      
+      // If the template defines columns, try to map by index if implicit order matches
+      // (This is a simplification, a real system would have strict ID mapping in templates)
+
       const newTask: any = {
         ...t,
         id: crypto.randomUUID(),
+        status: targetColId,
+        boardId: boardId,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         tags: t.tags || [],
         completed: false,
         color: '#3b82f6',
-        description: '',
-        assignee: '',
+        description: `Создано из шаблона: ${template.name}`,
         order: Date.now()
       };
       await StorageService.addTask(newTask);
+      appStore.addTask(newTask);
     }
+
     if (onRefresh) onRefresh();
-    alert(`Шаблон "${template.name}" применен!`);
+    alert(`Шаблон "${template.name}" успешно применен! Перейдите на доску.`);
   };
 
   return (
-    <div className="flex h-[calc(100vh-80px)] overflow-hidden bg-bg-main">
-      {/* LEFT: Rules List */}
-      <div className="w-80 bg-bg-surface border-r border-border flex flex-col hidden lg:flex">
-        <div className="p-4 border-b border-border">
-          <h3 className="font-bold text-lg mb-2">Мои правила</h3>
-          <button 
-             onClick={() => {
-                 setEditingRule({ name: 'Новое правило', isActive: true, trigger: { type: 'status_change', value: 'done' }, action: { type: 'add_tag', value: '' } });
-                 setSimulationResult(null);
-             }}
-             className="w-full btn-secondary text-sm"
-          >
-            + Создать
-          </button>
+    <div className="h-full overflow-y-auto bg-bg-main p-4 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-text-main mb-2">Библиотека шаблонов</h2>
+          <p className="text-text-muted">
+            Выберите готовый набор задач и колонок, чтобы быстро запустить проект.
+            При выборе шаблона будет создана новая доска.
+          </p>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
-          {appState.automations.map(rule => (
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
+          {TEMPLATES_LIBRARY.map(template => (
             <div 
-              key={rule.id}
-              onClick={() => { setEditingRule(rule); setSimulationResult(null); }}
-              className={`p-3 rounded-lg border cursor-pointer transition-all ${editingRule.id === rule.id ? 'bg-primary/10 border-primary' : 'bg-bg-panel border-transparent hover:border-border'}`}
+              key={template.id} 
+              className="bg-bg-surface border border-border rounded-xl shadow-card hover:shadow-lg transition-all duration-300 flex flex-col overflow-hidden group"
             >
-               <div className="flex justify-between items-center mb-1">
-                 <span className="font-semibold text-sm truncate">{rule.name}</span>
-                 <div className={`w-2 h-2 rounded-full ${rule.isActive ? 'bg-success' : 'bg-gray-300'}`}></div>
-               </div>
-               <div className="text-xs text-text-muted truncate">
-                 {rule.trigger.type} ➜ {rule.action.type}
-               </div>
+              <div className={`h-2 ${template.color} w-full`}></div>
+              
+              <div className="p-6 flex-1 flex flex-col">
+                <div className="flex justify-between items-start mb-3">
+                   <span className="text-xs font-bold uppercase tracking-wider text-text-muted bg-bg-panel px-2 py-1 rounded">
+                     {template.category}
+                   </span>
+                </div>
+                
+                <h3 className="text-xl font-bold text-text-main mb-2 group-hover:text-primary transition-colors">
+                  {template.name}
+                </h3>
+                <p className="text-sm text-text-muted mb-6 flex-1">
+                  {template.description}
+                </p>
+
+                {/* Mini Preview */}
+                <div className="bg-bg-panel rounded-lg p-3 mb-6 space-y-2 border border-border/50">
+                   <div className="text-xs font-semibold text-text-muted mb-2">Пример задач:</div>
+                   {template.tasks.slice(0, 3).map((t, i) => (
+                     <div key={i} className="flex items-center gap-2 text-xs text-text-main">
+                        <div className={`w-1.5 h-1.5 rounded-full ${t.status === 'done' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                        <span className="truncate">{t.title}</span>
+                     </div>
+                   ))}
+                   {template.tasks.length > 3 && (
+                     <div className="text-xs text-text-disabled pl-3.5">+ еще {template.tasks.length - 3}</div>
+                   )}
+                </div>
+
+                <button 
+                  onClick={() => handleApplyTemplate(template)}
+                  className="w-full btn-primary justify-center py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all active:scale-95"
+                >
+                  Использовать шаблон
+                </button>
+              </div>
             </div>
           ))}
         </div>
-      </div>
-
-      {/* RIGHT: Visual Editor */}
-      <div className="flex-1 flex flex-col bg-bg-main overflow-y-auto">
-        <div className="p-4 border-b border-border bg-bg-surface flex justify-between items-center">
-           <input 
-             type="text" 
-             value={editingRule.name}
-             onChange={e => setEditingRule({...editingRule, name: e.target.value})}
-             className="text-xl font-bold bg-transparent border-none focus:outline-none text-text-main"
-             placeholder="Название правила..."
-           />
-           <div className="flex gap-2">
-             {editingRule.id && (
-                 <button onClick={() => deleteRule(editingRule.id!)} className="text-error hover:bg-error/10 px-3 py-1.5 rounded transition">Удалить</button>
-             )}
-             <button onClick={saveRule} className="btn-primary">Сохранить</button>
-           </div>
-        </div>
-
-        <div className="flex-1 p-6 md:p-10 max-w-4xl mx-auto w-full space-y-8">
-           
-           {/* TRIGGER BLOCK */}
-           <div className="relative group">
-              <div className="absolute left-6 top-full h-8 w-0.5 bg-gray-300 dark:bg-gray-600 -z-10"></div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 border-yellow-400 p-5 relative">
-                 <div className="absolute -left-3 -top-3 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center font-bold text-white text-sm">IF</div>
-                 <h4 className="text-xs font-bold text-yellow-500 uppercase mb-3">Триггер (Когда это происходит)</h4>
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                       <label className="text-xs text-text-muted">Тип события</label>
-                       <select 
-                         value={editingRule.trigger?.type}
-                         onChange={e => setEditingRule({ ...editingRule, trigger: { ...editingRule.trigger!, type: e.target.value as any } })}
-                         className="input-field"
-                       >
-                         <option value="status_change">Изменился статус</option>
-                         <option value="tag_added">Добавлен тег</option>
-                         <option value="inactivity">Задача не активна (дней)</option>
-                         <option value="location_enter">Вход в геозону</option>
-                         <option value="location_leave">Выход из геозоны</option>
-                       </select>
-                    </div>
-
-                    {/* Dynamic Inputs based on Trigger */}
-                    {editingRule.trigger?.type === 'status_change' && (
-                        <div className="space-y-1">
-                          <label className="text-xs text-text-muted">Станет равным</label>
-                          <select 
-                            value={editingRule.trigger.value}
-                            onChange={e => setEditingRule({ ...editingRule, trigger: { ...editingRule.trigger!, value: e.target.value } })}
-                            className="input-field"
-                          >
-                            <option value="backlog">Бэклог</option>
-                            <option value="in-progress">В работе</option>
-                            <option value="review">Проверка</option>
-                            <option value="done">Готово</option>
-                          </select>
-                        </div>
-                    )}
-                    
-                    {editingRule.trigger?.type === 'tag_added' && (
-                        <div className="space-y-1">
-                          <label className="text-xs text-text-muted">Тег</label>
-                          <input 
-                            type="text"
-                            value={editingRule.trigger.value}
-                            onChange={e => setEditingRule({ ...editingRule, trigger: { ...editingRule.trigger!, value: e.target.value } })}
-                            className="input-field"
-                            placeholder="напр. urgent"
-                          />
-                        </div>
-                    )}
-
-                    {editingRule.trigger?.type === 'inactivity' && (
-                        <div className="space-y-1">
-                          <label className="text-xs text-text-muted">Дней без изменений</label>
-                          <input 
-                            type="number"
-                            value={editingRule.trigger.inactivityDays || 7}
-                            onChange={e => setEditingRule({ ...editingRule, trigger: { ...editingRule.trigger!, inactivityDays: parseInt(e.target.value) } })}
-                            className="input-field"
-                          />
-                        </div>
-                    )}
-
-                    {(editingRule.trigger?.type === 'location_enter' || editingRule.trigger?.type === 'location_leave') && (
-                        <>
-                           <div className="space-y-1">
-                             <label className="text-xs text-text-muted">Широта (Lat)</label>
-                             <input 
-                               type="number" step="0.0001"
-                               value={editingRule.trigger.location?.lat || 0}
-                               onChange={e => setEditingRule({ ...editingRule, trigger: { ...editingRule.trigger!, location: { lat: parseFloat(e.target.value), lng: editingRule.trigger?.location?.lng || 0, radius: editingRule.trigger?.location?.radius || 100 } } })}
-                               className="input-field"
-                             />
-                           </div>
-                           <div className="space-y-1">
-                             <label className="text-xs text-text-muted">Долгота (Lng)</label>
-                             <input 
-                               type="number" step="0.0001"
-                               value={editingRule.trigger.location?.lng || 0}
-                               onChange={e => setEditingRule({ ...editingRule, trigger: { ...editingRule.trigger!, location: { lat: editingRule.trigger?.location?.lat || 0, lng: parseFloat(e.target.value), radius: editingRule.trigger?.location?.radius || 100 } } })}
-                               className="input-field"
-                             />
-                           </div>
-                           <div className="space-y-1 col-span-2">
-                             <label className="text-xs text-text-muted">Радиус (метров)</label>
-                             <input 
-                               type="number"
-                               value={editingRule.trigger.location?.radius || 100}
-                               onChange={e => setEditingRule({ ...editingRule, trigger: { ...editingRule.trigger!, location: { ...editingRule.trigger!.location!, radius: parseInt(e.target.value) } } })}
-                               className="input-field"
-                             />
-                             <button 
-                               type="button" 
-                               onClick={() => {
-                                 navigator.geolocation.getCurrentPosition(pos => {
-                                   setEditingRule({ ...editingRule, trigger: { ...editingRule.trigger!, location: { lat: pos.coords.latitude, lng: pos.coords.longitude, radius: 100 } } });
-                                 });
-                               }}
-                               className="text-xs text-primary underline mt-1"
-                             >
-                               📍 Взять текущую позицию
-                             </button>
-                           </div>
-                        </>
-                    )}
-                 </div>
-              </div>
-           </div>
-
-           {/* ACTION BLOCK */}
-           <div className="relative">
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 border-blue-500 p-5 relative">
-                 <div className="absolute -left-3 -top-3 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-bold text-white text-sm">DO</div>
-                 <h4 className="text-xs font-bold text-blue-500 uppercase mb-3">Действие (Что сделать)</h4>
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                       <label className="text-xs text-text-muted">Тип действия</label>
-                       <select 
-                         value={editingRule.action?.type}
-                         onChange={e => setEditingRule({ ...editingRule, action: { ...editingRule.action!, type: e.target.value as any } })}
-                         className="input-field"
-                       >
-                         <option value="add_tag">Добавить тег</option>
-                         <option value="set_color">Установить цвет</option>
-                         <option value="assign_user">Назначить на...</option>
-                         <option value="create_notification">Показать уведомление</option>
-                         <option value="webhook">Отправить Webhook</option>
-                       </select>
-                    </div>
-
-                    <div className="space-y-1">
-                       <label className="text-xs text-text-muted">Значение / URL</label>
-                       <input 
-                         type="text"
-                         value={editingRule.action?.value}
-                         onChange={e => setEditingRule({ ...editingRule, action: { ...editingRule.action!, value: e.target.value } })}
-                         className="input-field"
-                         placeholder={editingRule.action?.type === 'set_color' ? '#FF0000' : 'Значение'}
-                       />
-                       {editingRule.action?.type === 'set_color' && (
-                         <div className="flex gap-2 mt-2">
-                           {['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'].map(c => (
-                             <div 
-                               key={c} 
-                               onClick={() => setEditingRule({ ...editingRule, action: { ...editingRule.action!, value: c } })}
-                               className="w-6 h-6 rounded-full cursor-pointer border border-gray-200" style={{ backgroundColor: c }}
-                             ></div>
-                           ))}
-                         </div>
-                       )}
-                    </div>
-                 </div>
-              </div>
-           </div>
-
-           {/* SIMULATOR */}
-           <div className="bg-bg-panel rounded-xl p-5 border border-dashed border-border">
-              <div className="flex justify-between items-center mb-4">
-                <h4 className="font-bold text-text-muted uppercase text-xs">Симуляция на исторических данных</h4>
-                <button onClick={runSimulation} className="text-xs px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:opacity-80">
-                  ▶ Запустить тест
-                </button>
-              </div>
-              
-              {simulationResult && (
-                 <div className="text-sm">
-                    {simulationResult.length === 0 ? (
-                      <p className="text-text-muted">Правило не затронет ни одной текущей задачи.</p>
-                    ) : (
-                      <div>
-                        <p className="mb-2 text-success">Правило сработает для <b>{simulationResult.length}</b> задач:</p>
-                        <ul className="list-disc list-inside space-y-1 text-text-muted max-h-32 overflow-y-auto">
-                          {simulationResult.slice(0, 5).map(t => (
-                            <li key={t.id}>{t.title} <span className="text-xs opacity-50">({t.status})</span></li>
-                          ))}
-                          {simulationResult.length > 5 && <li>...и еще {simulationResult.length - 5}</li>}
-                        </ul>
-                      </div>
-                    )}
-                 </div>
-              )}
-           </div>
-
-           {/* Templates Section (Simplified) */}
-           <div className="mt-12 pt-8 border-t border-border">
-              <h3 className="text-xl font-bold mb-4">Библиотека шаблонов</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {DEFAULT_TEMPLATES.map(tpl => (
-                  <div key={tpl.id} className="p-4 border border-border rounded-lg hover:shadow-md transition bg-bg-surface">
-                    <h5 className="font-bold">{tpl.name}</h5>
-                    <p className="text-xs text-text-muted mb-3">{tpl.description}</p>
-                    <button onClick={() => handleApplyTemplate(tpl)} className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded">Использовать</button>
-                  </div>
-                ))}
-              </div>
-           </div>
+        
+        <div className="text-center text-text-disabled text-sm mt-8 pb-8">
+           Хотите создать свой шаблон? Настройте доску и сохраните её конфигурацию (Скоро).
         </div>
       </div>
     </div>

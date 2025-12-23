@@ -172,7 +172,7 @@ export const TaskList: React.FC<TaskListProps> = ({ tasks, onAdd, onToggle, onDe
   };
 
   return (
-    <div className="flex flex-col h-full space-y-6">
+    <div className="flex flex-col h-full space-y-6 p-4 lg:p-8 max-w-5xl mx-auto">
       {/* Desktop Input */}
       <form onSubmit={handleSubmit} className="hidden lg:flex gap-3">
         <input
@@ -191,7 +191,7 @@ export const TaskList: React.FC<TaskListProps> = ({ tasks, onAdd, onToggle, onDe
         </button>
       </form>
 
-      <div className="flex-1 overflow-y-auto pr-1 pb-20 lg:pb-0 space-y-6">
+      <div className="flex-1 overflow-y-auto pr-1 pb-20 lg:pb-0 space-y-6 no-scrollbar">
         <div>
           <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider mb-4 px-1">
             В работе ({activeTasks.length})

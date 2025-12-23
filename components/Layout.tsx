@@ -67,7 +67,7 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'board', label: 'Доска', icon: '📊' },
     { id: 'notes', label: 'Заметки', icon: '📝' },
     { id: 'analytics', label: 'Инфо', icon: '📈' },
-    { id: 'automation', label: 'Авто', icon: '⚡' },
+    { id: 'automation', label: 'Шаблоны', icon: '🧩' },
     { id: 'settings', label: 'Настройки', icon: '⚙️' },
   ];
 
@@ -248,17 +248,18 @@ export const Layout: React.FC<LayoutProps> = ({
            <div className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
         </header>
 
-        {/* Scrollable Content Container */}
+        {/* Content Container - No Padding, No Scroll (Children handle scroll) */}
         <main 
            ref={contentRef}
-           className="flex-1 overflow-y-auto p-4 lg:p-8 scroll-smooth z-10 transition-transform duration-200 ease-out pb-24 lg:pb-8"
+           className="flex-1 overflow-hidden relative z-10 transition-transform duration-200 ease-out"
            style={{ transform: `translateY(${pullY}px)` }}
            onScroll={() => {
-              // Hide pull to refresh when scrolling down
+              // Note: main is overflow-hidden, so this event might not fire on it directly anymore,
+              // but kept if we switch strategy. Pull to refresh mainly relies on touch events now.
               if (pullY > 0) setPullY(0);
            }}
         >
-          <div className="max-w-[1200px] mx-auto h-full">
+          <div className="w-full h-full">
             {children}
           </div>
         </main>

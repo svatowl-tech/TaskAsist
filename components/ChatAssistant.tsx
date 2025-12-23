@@ -11,6 +11,7 @@ interface ChatAssistantProps {
   onAddTask: (task: Partial<Task>) => Promise<void>;
   onUpdateTask: (id: string, updates: Partial<Task>) => Promise<void>;
   onAddNote: (note: Partial<Note>) => Promise<void>;
+  onCreateBoard: (title: string, columns?: string[], tasks?: any[]) => Promise<void>; // New prop
 }
 
 export const ChatAssistant: React.FC<ChatAssistantProps> = ({
@@ -20,13 +21,14 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({
   onUpdateSettings,
   onAddTask,
   onUpdateTask,
-  onAddNote
+  onAddNote,
+  onCreateBoard
 }) => {
   const [input, setInput] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', role: 'assistant', content: 'Привет! Я Copilot. Чем помочь?', timestamp: Date.now() }
+    { id: '1', role: 'assistant', content: 'Привет! Я Copilot. Скажи мне, что нужно сделать (например, "Спланируй отпуск"), и я создам проект.', timestamp: Date.now() }
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +107,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({
         if (response.toolCalls && response.toolCalls.length > 0) {
           for (const tool of response.toolCalls) {
              let toolResult = "";
+             
              if (tool.name === 'create_task') {
                await onAddTask({
                  title: tool.arguments.title,
@@ -112,8 +115,9 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({
                  status: tool.arguments.status || 'backlog',
                  deadline: tool.arguments.due_date ? new Date(tool.arguments.due_date).getTime() : undefined
                });
-               toolResult = "Задача создана.";
-             } else if (tool.name === 'create_note') {
+               toolResult = `Создана задача: ${tool.arguments.title}`;
+             } 
+             else if (tool.name === 'create_note') {
                await onAddNote({
                  title: tool.arguments.title,
                  content: tool.arguments.content,
@@ -122,9 +126,16 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({
                  createdAt: Date.now(),
                  updatedAt: Date.now()
                });
-               toolResult = "Заметка создана.";
+               toolResult = `Создана заметка: ${tool.arguments.title}`;
              }
-             setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: `[Executed ${tool.name}]: ${toolResult}`, timestamp: Date.now() }]);
+             else if (tool.name === 'create_project') {
+               // Execute create board
+               const { title, columns, tasks } = tool.arguments;
+               await onCreateBoard(title, columns, tasks);
+               toolResult = `Создан проект "${title}" и задачи. Переключаю на доску...`;
+             }
+
+             setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: `⚡ ${toolResult}`, timestamp: Date.now() }]);
           }
         }
 

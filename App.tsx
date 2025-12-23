@@ -604,6 +604,47 @@ const App: React.FC = () => {
       }
   };
 
+  // --- Handlers passed to Chat Assistant for direct execution ---
+  const handleCreateBoard = async (title: string, columns?: string[], tasks?: any[]) => {
+      const boardId = crypto.randomUUID();
+      const colDefs: BoardColumn[] = (columns || ['To Do', 'In Progress', 'Done']).map((t, i) => ({
+          id: t.toLowerCase().replace(/\s/g, '_'),
+          title: t,
+          order: i
+      }));
+      
+      const newBoard: Board = {
+          id: boardId,
+          title,
+          columns: colDefs
+      };
+      
+      await StorageService.saveBoard(newBoard);
+      appStore.updateBoard(newBoard);
+      appStore.setActiveBoard(boardId);
+      
+      if (tasks && tasks.length > 0) {
+          for (const t of tasks) {
+              const colId = colDefs.find(c => c.title === t.column)?.id || colDefs[0].id;
+              const task: Task = {
+                  id: crypto.randomUUID(),
+                  title: t.title,
+                  description: t.description || '',
+                  status: colId,
+                  boardId: boardId,
+                  tags: [],
+                  completed: false,
+                  createdAt: Date.now(),
+                  updatedAt: Date.now(),
+                  order: Date.now()
+              };
+              await StorageService.addTask(task);
+              appStore.addTask(task);
+          }
+      }
+      setViewMode('board');
+  };
+
   if (state.isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -828,6 +869,7 @@ const App: React.FC = () => {
             appStore.updateTask({ ...state.tasks.find(t => t.id === id)!, ...u });
           }}
           onAddNote={handleSaveNote}
+          onCreateBoard={handleCreateBoard} // New Prop
         />
       </Suspense>
     </>
