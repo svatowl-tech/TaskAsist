@@ -205,7 +205,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                     <div 
                       key={item.id}
                       onClick={(e) => { 
-                          if (item.type === 'task') {
+                          if (item.type === 'task' && item.original) {
                               e.stopPropagation(); 
                               onTaskClick(item.original); 
                           }
@@ -277,7 +277,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                       <div
                         key={item.id}
                         onClick={(e) => { 
-                            if (item.type === 'task') {
+                            if (item.type === 'task' && item.original) {
                                 e.stopPropagation(); 
                                 onTaskClick(item.original); 
                             }

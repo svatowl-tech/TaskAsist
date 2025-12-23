@@ -13,10 +13,11 @@ const ChatAssistant = React.lazy(() => import('./components/ChatAssistant').then
 const SettingsView = React.lazy(() => import('./components/SettingsView').then(m => ({ default: m.SettingsView })));
 
 import { TaskModal } from './components/TaskModal';
-import { MagicInput } from './components/MagicInput'; // New Import
+import { MagicInput } from './components/MagicInput'; 
+import { InstallPwaPrompt } from './components/InstallPwaPrompt'; // New Import
 import { Skeleton } from './components/Skeleton';
 import { CommandPalette } from './components/CommandPalette';
-import { PomodoroTimer } from './components/PomodoroTimer'; // Import Timer
+import { PomodoroTimer } from './components/PomodoroTimer'; 
 import { StorageService } from './services/storageService';
 import { SyncService } from './services/syncService';
 import { AuthService } from './services/authService';
@@ -24,7 +25,7 @@ import { NotificationService } from './services/notificationService';
 import { AutomationService } from './services/automationService';
 import { CopilotService } from './services/copilotService';
 import { DeveloperApiService } from './services/developerApiService';
-import { MonitoringService } from './services/monitoringService'; // Monitoring
+import { MonitoringService } from './services/monitoringService'; 
 import { Task, Note, AppState, ViewMode, TaskStatus, User, AppSettings, Goal, AutomationRule, ProjectTemplate, Board, BoardColumn } from './types';
 import { appStore, DEFAULT_COLUMNS } from './lib/store';
 import { AiIntentResult } from './services/aiService';
@@ -61,7 +62,7 @@ const App: React.FC = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isMagicOpen, setIsMagicOpen] = useState(false); // Magic Input State
+  const [isMagicOpen, setIsMagicOpen] = useState(false); 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   
   // Test State
@@ -610,6 +611,7 @@ const App: React.FC = () => {
 
   return (
     <>
+      <InstallPwaPrompt />
       {/* Test Runner Overlay */}
       {testResults && (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">

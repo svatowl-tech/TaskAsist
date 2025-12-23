@@ -110,7 +110,7 @@ export class ExportService {
         useCORS: true, // For images
       });
 
-      canvas.toBlob(async (blob) => {
+      canvas.toBlob(async (blob: Blob | null) => {
         if (!blob) return;
         
         const file = new File([blob], filename, { type: 'image/png' });
