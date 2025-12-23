@@ -29,7 +29,7 @@ interface TaskFormData {
   eventType: string;
   color: string;
   recurrenceFreq: 'none' | 'daily' | 'weekly' | 'monthly';
-  recurrenceDays: number[]; // 0-6
+  recurrenceDays: number[]; // 0-6 (0=Sun, 1=Mon... as per Date.getDay())
   startTime: string; // HH:mm
   startDate: string; // YYYY-MM-DD
   estimatedDuration: number;
@@ -37,6 +37,16 @@ interface TaskFormData {
   syncToGCal: boolean;
   boardId: string;
 }
+
+const WEEK_DAYS = [
+    { label: 'Пн', val: 1 },
+    { label: 'Вт', val: 2 },
+    { label: 'Ср', val: 3 },
+    { label: 'Чт', val: 4 },
+    { label: 'Пт', val: 5 },
+    { label: 'Сб', val: 6 },
+    { label: 'Вс', val: 0 },
+];
 
 export const TaskModal: React.FC<TaskModalProps> = ({ 
   isOpen, 
@@ -353,17 +363,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                  <div className="space-y-1 pt-1">
                     <label className="text-xs font-medium text-text-muted block mb-1">Дни недели</label>
                     <div className="flex justify-between gap-1">
-                        {['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'].map((day, idx) => (
+                        {WEEK_DAYS.map(({ label, val }) => (
                             <button
-                                key={day}
+                                key={val}
                                 type="button"
-                                onClick={() => toggleDay(idx)}
+                                onClick={() => toggleDay(val)}
                                 className={`
                                     w-8 h-8 rounded-full text-xs font-medium transition
-                                    ${formData.recurrenceDays.includes(idx) ? 'bg-primary text-white' : 'bg-bg-surface border border-border hover:bg-bg-main'}
+                                    ${formData.recurrenceDays.includes(val) ? 'bg-primary text-white' : 'bg-bg-surface border border-border hover:bg-bg-main'}
                                 `}
                             >
-                                {day}
+                                {label}
                             </button>
                         ))}
                     </div>

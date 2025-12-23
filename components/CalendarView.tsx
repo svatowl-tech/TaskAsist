@@ -1,26 +1,29 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Task, WorkSchedule, GlobalEvent } from '../types';
+import { Task, Note, WorkSchedule, GlobalEvent } from '../types';
 import { AuthService } from '../services/authService';
 import { GoogleCalendarService } from '../services/googleCalendarService';
 import { appStore } from '../lib/store';
 
 interface CalendarViewProps {
   tasks: Task[];
+  notes: Note[];
   onTaskClick: (task: Task) => void;
   onDateClick: (date: number) => void;
+  onTaskDrop: (taskId: string, date: number) => void;
 }
 
 type CalendarMode = 'month' | 'day';
 
-const DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, onDateClick }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, notes, onTaskClick, onDateClick, onTaskDrop }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [mode, setMode] = useState<CalendarMode>('month');
   const [externalEvents, setExternalEvents] = useState<any[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   
   // Get Global Settings
   const { settings, globalEvents } = appStore.getState();
@@ -45,7 +48,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
     fetchEvents();
   }, [currentDate.getMonth(), currentDate.getFullYear()]);
 
-  // Combine Tasks, Events and Global Events
+  // Combine Tasks, Events, Global Events, and Notes
   const allItems = useMemo(() => {
       const taskItems = tasks.map(t => ({
           id: t.id,
@@ -56,6 +59,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
           completed: t.completed,
           type: 'task',
           original: t
+      }));
+
+      const noteItems = notes.map(n => ({
+          id: n.id,
+          title: n.title,
+          start: new Date(n.updatedAt || n.createdAt),
+          end: new Date(n.updatedAt || n.createdAt),
+          color: '#FBBF24', // Amber for notes
+          completed: false,
+          type: 'note',
+          original: null
       }));
 
       const googleItems = externalEvents.map(e => ({
@@ -87,8 +101,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
           };
       });
 
-      return [...taskItems, ...googleItems, ...globalItems].filter(i => i.start);
-  }, [tasks, externalEvents, globalEvents, currentDate]);
+      return [...taskItems, ...noteItems, ...googleItems, ...globalItems].filter(i => i.start);
+  }, [tasks, notes, externalEvents, globalEvents, currentDate]);
 
   // --- Helpers ---
   
@@ -96,7 +110,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
     const year = date.getFullYear();
     const month = date.getMonth();
     const days = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
+    
+    // JS getDay(): 0 = Sun, 1 = Mon ... 6 = Sat
+    let firstDayIndex = new Date(year, month, 1).getDay();
+    // Shift to Mon=0, Sun=6
+    const firstDay = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
+    
     return { days, firstDay };
   };
 
@@ -106,16 +125,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
            d1.getFullYear() === d2.getFullYear();
   };
 
-  // Determine if a day is a work day based on schedule config
   const isWorkDay = (date: Date): boolean => {
       if (workSchedule.type === 'standard') {
           return (workSchedule.workDays || []).includes(date.getDay());
       } 
       else if (workSchedule.type === 'shift' && workSchedule.shiftConfig) {
           const { startDate, workCount, offCount } = workSchedule.shiftConfig;
-          if (!startDate) return true; // fallback
+          if (!startDate) return true;
           
-          // Normalize to midnight UTC to avoid timezone drift issues in calculation
           const start = new Date(startDate);
           start.setHours(0,0,0,0);
           const current = new Date(date);
@@ -123,14 +140,36 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
           
           const diffTime = current.getTime() - start.getTime();
           const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-          
           const cycleLength = workCount + offCount;
-          // Handle negative dates (before start) correctly with modulo
           const dayInCycle = ((diffDays % cycleLength) + cycleLength) % cycleLength;
           
           return dayInCycle < workCount;
       }
       return true;
+  };
+
+  // --- Drag & Drop ---
+  const handleDragStart = (e: React.DragEvent, taskId: string, type: string) => {
+      if (type !== 'task') {
+          e.preventDefault();
+          return;
+      }
+      e.dataTransfer.setData('text/plain', taskId);
+      e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, dateStr: string) => {
+      e.preventDefault();
+      setDragOverDate(dateStr);
+  };
+
+  const handleDrop = (e: React.DragEvent, date: Date) => {
+      e.preventDefault();
+      setDragOverDate(null);
+      const taskId = e.dataTransfer.getData('text/plain');
+      if (taskId) {
+          onTaskDrop(taskId, date.getTime());
+      }
   };
 
   // --- Navigation ---
@@ -177,16 +216,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
           
           {monthDays.map(day => {
             const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+            const dateStr = date.toISOString().split('T')[0];
             const dayItems = allItems.filter(i => i.start && isSameDay(i.start, date));
             const isToday = isSameDay(date, new Date());
             const isWorking = isWorkDay(date);
+            const isOver = dragOverDate === dateStr;
 
             return (
               <div 
                 key={day} 
                 onClick={() => onDateClick(date.getTime())}
+                onDragOver={(e) => handleDragOver(e, dateStr)}
+                onDragLeave={() => setDragOverDate(null)}
+                onDrop={(e) => handleDrop(e, date)}
                 className={`
-                  p-1 border-b border-r border-border transition-colors hover:bg-bg-panel cursor-pointer flex flex-col gap-1 overflow-hidden
+                  p-1 border-b border-r border-border transition-colors cursor-pointer flex flex-col gap-1 overflow-hidden relative
+                  ${isOver ? 'bg-primary/20 ring-inset ring-2 ring-primary' : 'hover:bg-bg-panel'}
                   ${isToday ? 'bg-primary/5' : !isWorking ? 'bg-gray-100/50 dark:bg-gray-800/30' : ''}
                 `}
               >
@@ -204,6 +249,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                   {dayItems.map(item => (
                     <div 
                       key={item.id}
+                      draggable={item.type === 'task'}
+                      onDragStart={(e) => handleDragStart(e, item.id, item.type)}
                       onClick={(e) => { 
                           if (item.type === 'task' && item.original) {
                               e.stopPropagation(); 
@@ -211,9 +258,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                           }
                       }}
                       className={`
-                        text-[10px] px-1.5 py-0.5 rounded-[4px] truncate border-l-2
+                        text-[10px] px-1.5 py-0.5 rounded-[4px] truncate border-l-2 cursor-grab active:cursor-grabbing
                         ${item.completed ? 'opacity-50 line-through' : ''}
                         ${item.type === 'global' ? 'font-bold' : ''}
+                        ${item.type === 'note' ? 'italic opacity-90' : ''}
                       `}
                       style={{ 
                         backgroundColor: (item.color || 'var(--color-primary)') + '1A', 
@@ -223,6 +271,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                       title={item.title}
                     >
                       {item.type === 'google' && '📅 '}
+                      {item.type === 'note' && '📝 '}
                       {item.type === 'global' && (item as any).icon}
                       {item.type !== 'global' && item.start && <span className="opacity-75 mr-1">{item.start.getHours()}:{item.start.getMinutes().toString().padStart(2, '0')}</span>}
                       {item.title}
@@ -252,13 +301,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                 <div className="w-16 flex-shrink-0 text-xs text-text-muted text-right pr-3 py-2 sticky left-0 bg-bg-surface border-r border-border z-10">
                   {hour.toString().padStart(2, '0')}:00
                 </div>
-                <div className="flex-1 relative" onClick={() => {
+                <div 
+                  className="flex-1 relative" 
+                  onDragOver={(e) => handleDragOver(e, `${currentDate.toISOString().split('T')[0]}-${hour}`)}
+                  onDrop={(e) => {
+                     e.preventDefault();
+                     const taskId = e.dataTransfer.getData('text/plain');
+                     const d = new Date(currentDate);
+                     d.setHours(hour, 0, 0, 0);
+                     if(taskId) onTaskDrop(taskId, d.getTime());
+                  }}
+                  onClick={() => {
                    const d = new Date(currentDate);
                    d.setHours(hour, 0, 0, 0);
                    onDateClick(d.getTime());
                 }}>
                   {dayItems.map(item => {
-                    // Global events show as all-day banner at top usually, but here we simplify
+                    // Global events
                     if (item.type === 'global' && hour === 0) {
                         return (
                             <div key={item.id} className="mb-1 bg-yellow-100 text-yellow-800 text-xs p-1 rounded border border-yellow-300">
@@ -267,7 +326,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                         );
                     }
                     if (item.type === 'global') return null;
-
                     if (!item.start || item.start.getHours() !== hour) return null;
 
                     const startMin = item.start.getMinutes();
@@ -276,13 +334,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                     return (
                       <div
                         key={item.id}
+                        draggable={item.type === 'task'}
+                        onDragStart={(e) => handleDragStart(e, item.id, item.type)}
                         onClick={(e) => { 
                             if (item.type === 'task' && item.original) {
                                 e.stopPropagation(); 
                                 onTaskClick(item.original); 
                             }
                         }}
-                        className="absolute left-1 right-1 rounded-[4px] border-l-4 p-1.5 text-xs shadow-sm overflow-hidden z-10 hover:z-20 cursor-pointer transition-all hover:shadow-md"
+                        className="absolute left-1 right-1 rounded-[4px] border-l-4 p-1.5 text-xs shadow-sm overflow-hidden z-10 hover:z-20 cursor-pointer transition-all hover:shadow-md active:cursor-grabbing"
                         style={{
                           top: `${(startMin / 60) * 100}%`,
                           height: `${Math.max((duration / 60) * 100, 30)}%`,
@@ -290,11 +350,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                           borderColor: item.color || 'var(--color-primary)',
                         }}
                       >
-                        <div className="font-semibold text-text-main">
-                            {item.type === 'google' ? '📅 ' : ''}{item.title}
+                        <div className="font-semibold text-text-main flex items-center gap-1">
+                            {item.type === 'google' && '📅'}
+                            {item.type === 'note' && '📝'}
+                            {item.title}
                         </div>
                         <div className="text-text-muted">
-                          {item.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {item.end?.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          {item.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </div>
                       </div>
                     );

@@ -468,6 +468,25 @@ const App: React.FC = () => {
     appStore.updateTask(updatedTask);
   }, []);
 
+  const handleUpdateTaskDate = useCallback(async (taskId: string, newDateTimestamp: number) => {
+    const task = appStore.getState().tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // Preserve time if moving to a new day, or default to start of day
+    const oldDate = task.startTime ? new Date(task.startTime) : (task.deadline ? new Date(task.deadline) : new Date());
+    const newDate = new Date(newDateTimestamp);
+    newDate.setHours(oldDate.getHours(), oldDate.getMinutes());
+
+    const updates: Partial<Task> = {
+        startTime: task.startTime ? newDate.getTime() : undefined,
+        deadline: task.deadline ? newDate.getTime() : (!task.startTime ? newDate.getTime() : undefined),
+        updatedAt: Date.now()
+    };
+
+    await StorageService.updateTask(taskId, { ...task, ...updates });
+    appStore.updateTask({ ...task, ...updates });
+  }, []);
+
   const handleDeleteTask = useCallback(async (id: string) => {
     const task = state.tasks.find(t => t.id === id);
     if (task) lastDeletedTask.current = task; // Save for Undo
@@ -711,8 +730,10 @@ const App: React.FC = () => {
             <div className="h-full">
               <CalendarView 
                 tasks={state.tasks}
+                notes={state.notes}
                 onTaskClick={(t) => { setEditingTask(t); setIsModalOpen(true); }}
                 onDateClick={(date) => { setInitialModalDate(date); setIsModalOpen(true); }}
+                onTaskDrop={handleUpdateTaskDate}
               />
             </div>
           )}

@@ -20,6 +20,16 @@ interface SettingsViewProps {
   onLogout?: () => void;
 }
 
+const WEEK_DAYS = [
+    { label: 'Пн', val: 1 },
+    { label: 'Вт', val: 2 },
+    { label: 'Ср', val: 3 },
+    { label: 'Чт', val: 4 },
+    { label: 'Пт', val: 5 },
+    { label: 'Сб', val: 6 },
+    { label: 'Вс', val: 0 },
+];
+
 export const SettingsView: React.FC<SettingsViewProps> = ({
   user,
   settings,
@@ -210,17 +220,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <div>
                               <label className="block text-sm font-medium text-text-muted mb-2">Рабочие дни</label>
                               <div className="flex gap-2 flex-wrap">
-                                  {['Вс','Пн','Вт','Ср','Чт','Пт','Сб'].map((day, idx) => (
+                                  {WEEK_DAYS.map(({ label, val }) => (
                                       <button 
-                                        key={idx}
+                                        key={val}
                                         onClick={() => {
                                             const current = scheduleConfig.workDays || [];
-                                            const newDays = current.includes(idx) ? current.filter(d => d !== idx) : [...current, idx];
+                                            const newDays = current.includes(val) ? current.filter(d => d !== val) : [...current, val];
                                             setScheduleConfig({...scheduleConfig, workDays: newDays});
                                         }}
-                                        className={`w-10 h-10 rounded-full border ${scheduleConfig.workDays?.includes(idx) ? 'bg-primary text-white border-primary' : 'bg-bg-surface border-border'}`}
+                                        className={`w-10 h-10 rounded-full border ${scheduleConfig.workDays?.includes(val) ? 'bg-primary text-white border-primary' : 'bg-bg-surface border-border'}`}
                                       >
-                                          {day}
+                                          {label}
                                       </button>
                                   ))}
                               </div>

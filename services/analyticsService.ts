@@ -4,20 +4,27 @@ import { Task } from '../types';
 export class AnalyticsService {
   
   static getWeeklyActivity(tasks: Task[]): { day: string; count: number }[] {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     const result = Array(7).fill(0);
     const today = new Date();
     
-    // Get start of week (Sunday)
+    // Get start of week (Monday)
+    // JS getDay(): 0=Sun, 1=Mon...
+    const currentDay = today.getDay();
+    // If Sunday (0), we need to go back 6 days. If Monday (1), 0 days.
+    const daysToMon = currentDay === 0 ? 6 : currentDay - 1;
+    
     const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay());
+    startOfWeek.setDate(today.getDate() - daysToMon);
     startOfWeek.setHours(0, 0, 0, 0);
 
     const completedTasks = tasks.filter(t => t.completed && t.updatedAt >= startOfWeek.getTime());
 
     completedTasks.forEach(t => {
-      const dayIndex = new Date(t.updatedAt).getDay();
-      result[dayIndex]++;
+      const d = new Date(t.updatedAt).getDay();
+      // Map JS day (0=Sun) to Array index (6=Sun)
+      const index = d === 0 ? 6 : d - 1;
+      result[index]++;
     });
 
     return result.map((count, index) => ({
