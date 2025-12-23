@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { AppSettings, User, AppState, BackupSnapshot, WorkSchedule, GlobalEvent } from '../types';
 import { AuthService } from '../services/authService';
 import { StorageService } from '../services/storageService';
+import { SyncService } from '../services/syncService';
 import { ExportService } from '../services/exportService';
 import { AVAILABLE_MODELS } from '../services/aiService';
 import { LocalAiService } from '../services/localAiService';
@@ -34,6 +35,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   user,
   settings,
   appState,
+  lastSynced,
   onUpdateSettings,
   onImportData,
   onClearData,
@@ -44,6 +46,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [encryptionPwd, setEncryptionPwd] = useState(settings.encryptionPassword || '');
   const [githubToken, setGithubToken] = useState(settings.githubToken || '');
   
+  // Sync State
+  const [isCloudLoading, setIsCloudLoading] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<string | null>(null);
+
   // Local AI State
   const [downloadProgress, setDownloadProgress] = useState<string>('');
   const [isDownloading, setIsDownloading] = useState(false);
@@ -77,6 +83,66 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         alert('Восстановлено!');
       }
     }
+  };
+
+  // --- Manual Sync Handlers ---
+
+  const handleManualCloudSave = async () => {
+      const token = AuthService.getToken();
+      const provider = AuthService.getProvider();
+      
+      if (!token || !user) {
+          alert('Сначала войдите в аккаунт');
+          return;
+      }
+      
+      setIsCloudLoading(true);
+      setCloudStatus('Сохранение...');
+      try {
+          await SyncService.upload(appState, token, provider || 'google');
+          setCloudStatus('Успешно сохранено ✅');
+          appStore.setState({ lastSynced: Date.now() });
+          setTimeout(() => setCloudStatus(null), 3000);
+      } catch (e) {
+          console.error(e);
+          setCloudStatus('Ошибка сохранения ❌');
+          alert('Ошибка при сохранении в облако');
+      } finally {
+          setIsCloudLoading(false);
+      }
+  };
+
+  const handleManualCloudLoad = async () => {
+      const token = AuthService.getToken();
+      const provider = AuthService.getProvider();
+      
+      if (!token || !user) {
+          alert('Сначала войдите в аккаунт');
+          return;
+      }
+
+      setIsCloudLoading(true);
+      setCloudStatus('Загрузка...');
+      try {
+          const result = await SyncService.download(token, provider || 'google', settings.encryptionPassword);
+          if (result.data) {
+              if (confirm('Это перезапишет текущие данные данными из облака. Продолжить?')) {
+                  onImportData(result.data, false);
+                  setCloudStatus('Данные загружены ✅');
+              } else {
+                  setCloudStatus('Отменено');
+              }
+          } else {
+              setCloudStatus('Файл в облаке не найден');
+          }
+          setTimeout(() => setCloudStatus(null), 3000);
+      } catch (e) {
+          console.error(e);
+          setCloudStatus('Ошибка загрузки ❌');
+          alert('Ошибка загрузки. Если используете шифрование, проверьте пароль.');
+      } finally {
+          setIsCloudLoading(false);
+      }
   };
 
   const saveSecuritySettings = () => {
@@ -407,8 +473,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {activeTab === 'sync' && (
         <div className="space-y-6 animate-in fade-in">
+          {/* Google Drive Controls */}
+          <section className="card p-6 border-l-4 border-blue-500">
+             <div className="flex justify-between items-start mb-4">
+                 <div>
+                     <h3 className="text-lg font-semibold mb-1">Google Drive Синхронизация</h3>
+                     <p className="text-sm text-text-muted">
+                       Автоматическая синхронизация при входе и выходе.
+                       {lastSynced && ` Посл. синхронизация: ${new Date(lastSynced).toLocaleTimeString()}`}
+                     </p>
+                 </div>
+                 {cloudStatus && <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded animate-pulse">{cloudStatus}</span>}
+             </div>
+             
+             <div className="flex gap-3 flex-wrap">
+                 <button 
+                   onClick={handleManualCloudSave} 
+                   disabled={isCloudLoading || !user}
+                   className="btn-primary gap-2"
+                 >
+                   ☁️ Выгрузить в облако (Save)
+                 </button>
+                 <button 
+                   onClick={handleManualCloudLoad} 
+                   disabled={isCloudLoading || !user}
+                   className="btn-secondary gap-2"
+                 >
+                   📥 Загрузить из облака (Load)
+                 </button>
+             </div>
+             {!user && <p className="text-xs text-error mt-2">Войдите через Google для использования.</p>}
+          </section>
+
           <section className="card p-6 border-l-4 border-l-purple-500">
              <h3 className="text-lg font-semibold mb-2">Шифрование (E2EE)</h3>
+             <p className="text-xs text-text-muted mb-3">Если задан пароль, данные шифруются перед отправкой в облако.</p>
              <div className="flex gap-2">
                <input 
                  type="password" 

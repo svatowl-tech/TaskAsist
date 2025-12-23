@@ -86,13 +86,28 @@ const App: React.FC = () => {
     return unsubscribe;
   }, []);
 
-  // --- Global Listeners (Cmd+K, Shake) ---
+  // --- Global Listeners (Cmd+K, Shake, Auto-Save on Exit) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsCmdPaletteOpen(prev => !prev);
       }
+    };
+    
+    // Auto-save on visibility change (Mobile/Desktop Exit)
+    const handleVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+            const currentState = appStore.getState();
+            const token = AuthService.getToken();
+            // Only sync if logged in and not currently syncing
+            if (token && currentState.user && currentState.user.provider === 'google') {
+                console.log('App hidden: Triggering auto-save to cloud...');
+                SyncService.upload(currentState, token, 'google')
+                    .then(() => console.log('Auto-save complete'))
+                    .catch(e => console.error('Auto-save failed', e));
+            }
+        }
     };
     
     // Shake Detection
@@ -121,12 +136,14 @@ const App: React.FC = () => {
     };
 
     window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     if (window.DeviceMotionEvent) {
        window.addEventListener('devicemotion', handleDeviceMotion, false);
     }
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('devicemotion', handleDeviceMotion);
     };
   }, []);
@@ -304,44 +321,15 @@ const App: React.FC = () => {
         const localTime = localState.lastSynced || 0;
         const cloudTime = cloudResult.updatedAt;
 
-        if (cloudTime > localTime + 60000) {
-           const confirmOverwrite = true; 
-
-           if (confirmOverwrite) {
+        // Auto-load if cloud is newer (more than 1 minute) or if local is empty
+        const isLocalEmpty = localState.tasks.length === 0 && localState.notes.length === 0;
+        
+        if (isLocalEmpty || cloudTime > localTime + 60000) {
              const newData = cloudResult.data;
-             await Promise.all(localState.tasks.map(t => StorageService.deleteTask(t.id)));
-             await Promise.all(newData.tasks.map(t => StorageService.addTask(t)));
-             await Promise.all(localState.notes.map(n => StorageService.deleteNote(n.id)));
-             await Promise.all(newData.notes.map(n => StorageService.addNote(n)));
-             await Promise.all(localState.goals.map(g => StorageService.deleteGoal(g.id)));
-             if (newData.goals) await Promise.all(newData.goals.map(g => StorageService.addGoal(g)));
-             if (newData.automations) await Promise.all(newData.automations.map(a => StorageService.addAutomation(a)));
-             if (newData.templates) await Promise.all(newData.templates.map(t => StorageService.addTemplate(t)));
-             if (newData.memory) await Promise.all(newData.memory.map(m => StorageService.setMemory(m.key, m.value)));
-             
-             // Sync boards
-             if (newData.boards) await Promise.all(newData.boards.map(b => StorageService.saveBoard(b)));
-             // Sync Global Events
-             if (newData.globalEvents) {
-                 await Promise.all(localState.globalEvents.map(e => StorageService.deleteGlobalEvent(e.id)));
-                 await Promise.all(newData.globalEvents.map(e => StorageService.addGlobalEvent(e)));
-             }
-
-             appStore.setState({ 
-               tasks: newData.tasks, 
-               notes: newData.notes,
-               goals: newData.goals || [],
-               automations: newData.automations || [],
-               templates: newData.templates || [],
-               memory: newData.memory || [],
-               boards: newData.boards || localState.boards,
-               activeBoardId: newData.activeBoardId || localState.activeBoardId,
-               globalEvents: newData.globalEvents || [],
-               settings: newData.settings || { theme: 'dark' }, 
-               lastSynced: Date.now() 
-             });
-           }
+             await handleImportData(newData, false); // False = overwrite
+             console.log('Auto-loaded data from cloud');
         } else if (cloudResult.data.settings) {
+            // Just sync settings if data is not newer
             appStore.setState(prev => ({ settings: { ...prev.settings, ...cloudResult.data?.settings } }));
         }
       }
@@ -374,7 +362,7 @@ const App: React.FC = () => {
       } finally {
         setIsSyncing(false);
       }
-    }, 2000);
+    }, 5000); // Increased debounce to 5s to reduce API calls
   }, []);
 
   // Monitor state changes for sync
@@ -524,6 +512,8 @@ const App: React.FC = () => {
     if (!merge) {
       await Promise.all(state.tasks.map(t => StorageService.deleteTask(t.id)));
       await Promise.all(state.notes.map(n => StorageService.deleteNote(n.id)));
+      await Promise.all(state.boards.map(b => StorageService.deleteBoard(b.id)));
+      await Promise.all(state.globalEvents.map(e => StorageService.deleteGlobalEvent(e.id)));
     }
     
     if (data.tasks) await Promise.all(data.tasks.map(t => StorageService.addTask(t)));
