@@ -66,7 +66,6 @@
     Создайте файл `.env` в корне проекта для настройки OAuth (если планируете разрабатывать авторизацию):
     ```env
     VITE_GOOGLE_CLIENT_ID=ваш_google_client_id
-    VITE_YANDEX_CLIENT_ID=ваш_yandex_client_id
     ```
 
 4.  **Запуск в режиме разработки:**
