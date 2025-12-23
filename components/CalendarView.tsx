@@ -1,6 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
-import { Task } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Task, WorkSchedule, GlobalEvent } from '../types';
+import { AuthService } from '../services/authService';
+import { GoogleCalendarService } from '../services/googleCalendarService';
+import { appStore } from '../lib/store';
 
 interface CalendarViewProps {
   tasks: Task[];
@@ -16,6 +19,76 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, onDateClick }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [mode, setMode] = useState<CalendarMode>('month');
+  const [externalEvents, setExternalEvents] = useState<any[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  
+  // Get Global Settings
+  const { settings, globalEvents } = appStore.getState();
+  const workSchedule = settings.workSchedule || { type: 'standard', workDays: [1,2,3,4,5] };
+
+  // Fetch Google Calendar Events
+  useEffect(() => {
+    const fetchEvents = async () => {
+       const token = AuthService.getToken();
+       const provider = AuthService.getProvider();
+       
+       if (token && provider === 'google') {
+          setIsLoadingEvents(true);
+          const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
+          const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString();
+          
+          const events = await GoogleCalendarService.listEvents(token, start, end);
+          setExternalEvents(events);
+          setIsLoadingEvents(false);
+       }
+    };
+    fetchEvents();
+  }, [currentDate.getMonth(), currentDate.getFullYear()]);
+
+  // Combine Tasks, Events and Global Events
+  const allItems = useMemo(() => {
+      const taskItems = tasks.map(t => ({
+          id: t.id,
+          title: t.title,
+          start: t.startTime ? new Date(t.startTime) : (t.deadline ? new Date(t.deadline) : null),
+          end: t.endTime ? new Date(t.endTime) : (t.startTime ? new Date(t.startTime + 3600000) : null),
+          color: t.color || 'var(--color-primary)',
+          completed: t.completed,
+          type: 'task',
+          original: t
+      }));
+
+      const googleItems = externalEvents.map(e => ({
+          id: e.id,
+          title: e.summary || '(Без названия)',
+          start: e.start.dateTime ? new Date(e.start.dateTime) : new Date(e.start.date),
+          end: e.end.dateTime ? new Date(e.end.dateTime) : new Date(e.end.date),
+          color: '#E040FB', // Purple for Google
+          completed: false,
+          type: 'google',
+          original: null
+      }));
+      
+      const globalItems = globalEvents.map(e => {
+          let eventDate = new Date(e.date);
+          if (e.isRecurringYearly) {
+              eventDate.setFullYear(currentDate.getFullYear());
+          }
+          return {
+              id: e.id,
+              title: e.title,
+              start: eventDate,
+              end: eventDate,
+              color: e.type === 'holiday' ? '#F56565' : '#ED8936',
+              completed: false,
+              type: 'global',
+              icon: e.type === 'birthday' ? '🎂 ' : e.type === 'vacation' ? '✈️ ' : '🎉 ',
+              original: null
+          };
+      });
+
+      return [...taskItems, ...googleItems, ...globalItems].filter(i => i.start);
+  }, [tasks, externalEvents, globalEvents, currentDate]);
 
   // --- Helpers ---
   
@@ -31,6 +104,33 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
     return d1.getDate() === d2.getDate() && 
            d1.getMonth() === d2.getMonth() && 
            d1.getFullYear() === d2.getFullYear();
+  };
+
+  // Determine if a day is a work day based on schedule config
+  const isWorkDay = (date: Date): boolean => {
+      if (workSchedule.type === 'standard') {
+          return (workSchedule.workDays || []).includes(date.getDay());
+      } 
+      else if (workSchedule.type === 'shift' && workSchedule.shiftConfig) {
+          const { startDate, workCount, offCount } = workSchedule.shiftConfig;
+          if (!startDate) return true; // fallback
+          
+          // Normalize to midnight UTC to avoid timezone drift issues in calculation
+          const start = new Date(startDate);
+          start.setHours(0,0,0,0);
+          const current = new Date(date);
+          current.setHours(0,0,0,0);
+          
+          const diffTime = current.getTime() - start.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          
+          const cycleLength = workCount + offCount;
+          // Handle negative dates (before start) correctly with modulo
+          const dayInCycle = ((diffDays % cycleLength) + cycleLength) % cycleLength;
+          
+          return dayInCycle < workCount;
+      }
+      return true;
   };
 
   // --- Navigation ---
@@ -77,12 +177,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
           
           {monthDays.map(day => {
             const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-            const dayTasks = tasks.filter(t => {
-              // Check deadline or startTime
-              const tDate = t.startTime ? new Date(t.startTime) : (t.deadline ? new Date(t.deadline) : null);
-              return tDate && isSameDay(tDate, date);
-            });
+            const dayItems = allItems.filter(i => i.start && isSameDay(i.start, date));
             const isToday = isSameDay(date, new Date());
+            const isWorking = isWorkDay(date);
 
             return (
               <div 
@@ -90,36 +187,45 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                 onClick={() => onDateClick(date.getTime())}
                 className={`
                   p-1 border-b border-r border-border transition-colors hover:bg-bg-panel cursor-pointer flex flex-col gap-1 overflow-hidden
-                  ${isToday ? 'bg-primary/5' : ''}
+                  ${isToday ? 'bg-primary/5' : !isWorking ? 'bg-gray-100/50 dark:bg-gray-800/30' : ''}
                 `}
               >
                 <div className="flex justify-between items-start p-1">
                   <span className={`
                     text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full
-                    ${isToday ? 'bg-primary text-white' : 'text-text-main'}
+                    ${isToday ? 'bg-primary text-white' : isWorking ? 'text-text-main' : 'text-error'}
                   `}>
                     {day}
                   </span>
+                  {!isWorking && <span className="text-[10px] text-text-muted uppercase font-bold tracking-tighter opacity-50">Вых</span>}
                 </div>
                 
                 <div className="flex-1 flex flex-col gap-1 overflow-y-auto max-h-[100px] no-scrollbar">
-                  {dayTasks.map(task => (
+                  {dayItems.map(item => (
                     <div 
-                      key={task.id}
-                      onClick={(e) => { e.stopPropagation(); onTaskClick(task); }}
+                      key={item.id}
+                      onClick={(e) => { 
+                          if (item.type === 'task') {
+                              e.stopPropagation(); 
+                              onTaskClick(item.original); 
+                          }
+                      }}
                       className={`
-                        text-[10px] px-1.5 py-0.5 rounded-[4px] truncate border-l-2 cursor-pointer
-                        ${task.completed ? 'opacity-50 line-through' : ''}
+                        text-[10px] px-1.5 py-0.5 rounded-[4px] truncate border-l-2
+                        ${item.completed ? 'opacity-50 line-through' : ''}
+                        ${item.type === 'global' ? 'font-bold' : ''}
                       `}
                       style={{ 
-                        backgroundColor: (task.color || 'var(--color-primary)') + '1A', // 10% opacity hex approximation
-                        borderColor: task.color || 'var(--color-primary)',
+                        backgroundColor: (item.color || 'var(--color-primary)') + '1A', 
+                        borderColor: item.color || 'var(--color-primary)',
                         color: 'var(--color-text-main)'
                       }}
-                      title={task.title}
+                      title={item.title}
                     >
-                      {task.startTime && <span className="opacity-75 mr-1">{new Date(task.startTime).getHours()}:{new Date(task.startTime).getMinutes().toString().padStart(2, '0')}</span>}
-                      {task.title}
+                      {item.type === 'google' && '📅 '}
+                      {item.type === 'global' && (item as any).icon}
+                      {item.type !== 'global' && item.start && <span className="opacity-75 mr-1">{item.start.getHours()}:{item.start.getMinutes().toString().padStart(2, '0')}</span>}
+                      {item.title}
                     </div>
                   ))}
                 </div>
@@ -132,53 +238,63 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
   };
 
   const renderDayView = () => {
-    // Filter tasks for this day
-    const dayTasks = tasks.filter(t => {
-       const tDate = t.startTime ? new Date(t.startTime) : (t.deadline ? new Date(t.deadline) : null);
-       return tDate && isSameDay(tDate, currentDate);
-    });
+    const dayItems = allItems.filter(i => i.start && isSameDay(i.start, currentDate));
+    const isWorking = isWorkDay(currentDate);
 
     return (
       <div className="bg-bg-surface rounded-card shadow-card border border-border overflow-hidden flex flex-col h-full">
+         <div className={`p-2 text-center text-sm border-b border-border ${!isWorking ? 'bg-red-50 dark:bg-red-900/20 text-red-600' : 'bg-green-50 dark:bg-green-900/20 text-green-600'}`}>
+             {isWorking ? 'Рабочий день' : 'Выходной день'}
+         </div>
          <div className="flex-1 overflow-y-auto relative h-[600px] no-scrollbar">
             {HOURS.map(hour => (
               <div key={hour} className="flex border-b border-border min-h-[60px] relative">
-                {/* Time Label */}
                 <div className="w-16 flex-shrink-0 text-xs text-text-muted text-right pr-3 py-2 sticky left-0 bg-bg-surface border-r border-border z-10">
                   {hour.toString().padStart(2, '0')}:00
                 </div>
-                {/* Grid Line */}
                 <div className="flex-1 relative" onClick={() => {
                    const d = new Date(currentDate);
                    d.setHours(hour, 0, 0, 0);
                    onDateClick(d.getTime());
                 }}>
-                  {/* Task Blocks */}
-                  {dayTasks.map(task => {
-                    const taskStart = task.startTime ? new Date(task.startTime) : null;
-                    const taskEnd = task.endTime ? new Date(task.endTime) : (taskStart ? new Date(taskStart.getTime() + 60*60*1000) : null);
-                    
-                    if (!taskStart || taskStart.getHours() !== hour) return null;
+                  {dayItems.map(item => {
+                    // Global events show as all-day banner at top usually, but here we simplify
+                    if (item.type === 'global' && hour === 0) {
+                        return (
+                            <div key={item.id} className="mb-1 bg-yellow-100 text-yellow-800 text-xs p-1 rounded border border-yellow-300">
+                                {(item as any).icon} {item.title}
+                            </div>
+                        );
+                    }
+                    if (item.type === 'global') return null;
 
-                    const startMin = taskStart.getMinutes();
-                    // Duration in minutes
-                    const duration = taskEnd ? (taskEnd.getTime() - taskStart.getTime()) / (1000 * 60) : 60;
+                    if (!item.start || item.start.getHours() !== hour) return null;
+
+                    const startMin = item.start.getMinutes();
+                    const duration = item.end ? (item.end.getTime() - item.start.getTime()) / (1000 * 60) : 60;
                     
                     return (
                       <div
-                        key={task.id}
-                        onClick={(e) => { e.stopPropagation(); onTaskClick(task); }}
+                        key={item.id}
+                        onClick={(e) => { 
+                            if (item.type === 'task') {
+                                e.stopPropagation(); 
+                                onTaskClick(item.original); 
+                            }
+                        }}
                         className="absolute left-1 right-1 rounded-[4px] border-l-4 p-1.5 text-xs shadow-sm overflow-hidden z-10 hover:z-20 cursor-pointer transition-all hover:shadow-md"
                         style={{
                           top: `${(startMin / 60) * 100}%`,
-                          height: `${Math.max((duration / 60) * 100, 30)}%`, // min height for visibility
-                          backgroundColor: (task.color || 'var(--color-primary)') + '1A',
-                          borderColor: task.color || 'var(--color-primary)',
+                          height: `${Math.max((duration / 60) * 100, 30)}%`,
+                          backgroundColor: (item.color || 'var(--color-primary)') + '1A',
+                          borderColor: item.color || 'var(--color-primary)',
                         }}
                       >
-                        <div className="font-semibold text-text-main">{task.title}</div>
+                        <div className="font-semibold text-text-main">
+                            {item.type === 'google' ? '📅 ' : ''}{item.title}
+                        </div>
                         <div className="text-text-muted">
-                          {taskStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {taskEnd?.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          {item.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {item.end?.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </div>
                       </div>
                     );
@@ -186,15 +302,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
                 </div>
               </div>
             ))}
-            {/* Current Time Indicator */}
-            {isSameDay(currentDate, new Date()) && (
-              <div 
-                className="absolute left-16 right-0 border-t-2 border-error z-20 pointer-events-none flex items-center"
-                style={{ top: `${(new Date().getHours() * 60 + new Date().getMinutes()) / (24 * 60) * 100}%` }}
-              >
-                <div className="w-2 h-2 rounded-full bg-error -ml-1"></div>
-              </div>
-            )}
          </div>
       </div>
     );
@@ -206,9 +313,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, 
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-bg-surface p-3 rounded-card shadow-card border border-border">
         <div className="flex items-center gap-2">
           <button onClick={prev} className="p-2 hover:bg-bg-panel rounded-[6px] text-text-muted transition-colors">◀</button>
-          <h2 className="text-lg font-bold w-48 text-center text-text-main">
+          <h2 className="text-lg font-bold w-48 text-center text-text-main flex flex-col items-center justify-center">
             {currentDate.toLocaleString('ru-RU', { month: 'long', year: 'numeric' })}
-            {mode === 'day' && <span className="block text-xs text-text-muted font-normal">{currentDate.toLocaleDateString('ru-RU')}</span>}
+            {isLoadingEvents && <span className="text-[10px] text-primary animate-pulse">Синхронизация Google...</span>}
           </h2>
           <button onClick={next} className="p-2 hover:bg-bg-panel rounded-[6px] text-text-muted transition-colors">▶</button>
           <button onClick={goToToday} className="text-sm text-primary font-medium px-3 py-1.5 bg-primary/10 rounded-[6px] hover:bg-primary/20 transition-colors">

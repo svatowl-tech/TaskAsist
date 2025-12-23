@@ -1,5 +1,7 @@
 
 import { AppState, Task } from '../types';
+// @ts-ignore
+import html2canvas from 'html2canvas';
 
 export class ExportService {
   
@@ -96,5 +98,51 @@ export class ExportService {
       reader.onerror = () => reject(new Error("Failed to read file"));
       reader.readAsText(file);
     });
+  }
+
+  static async shareAsImage(element: HTMLElement, filename: string = 'share.png') {
+    try {
+      // Capture
+      const canvas = await html2canvas(element, {
+        backgroundColor: window.getComputedStyle(document.body).backgroundColor, // Ensure background matches theme
+        scale: 2, // High DPI
+        logging: false,
+        useCORS: true, // For images
+      });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        
+        const file = new File([blob], filename, { type: 'image/png' });
+
+        // Try Native Share API (Mobile)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'Поделиться',
+              text: 'Посмотрите на эту задачу из TaskAssist'
+            });
+            return;
+          } catch (e) {
+            // Share cancelled or failed, fallback to download
+            console.log("Share failed/cancelled, falling back to download");
+          }
+        }
+
+        // Fallback: Download
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+      }, 'image/png');
+
+    } catch (e) {
+      console.error("Failed to generate image", e);
+      alert("Не удалось создать изображение.");
+    }
   }
 }

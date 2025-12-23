@@ -1,5 +1,5 @@
 
-import { Task, AutomationRule, AppState } from '../types';
+import { Task, AutomationRule, AppState, RecurrenceConfig } from '../types';
 import { StorageService } from './storageService';
 import { NotificationService } from './notificationService';
 
@@ -160,27 +160,57 @@ export class AutomationService {
     const oneDay = 24 * 60 * 60 * 1000;
 
     for (const task of tasks) {
-      if (!task.recurrence || task.recurrence === 'none') continue;
+      if (!task.recurrence) continue;
       if (task.status !== 'done') continue; 
+
+      // Parse Recurrence Config
+      let config: RecurrenceConfig;
+      if (typeof task.recurrence === 'string') {
+        if (task.recurrence === 'none') continue;
+        config = { frequency: task.recurrence as any, interval: 1 };
+      } else {
+        config = task.recurrence;
+        if (config.frequency === 'none') continue;
+      }
 
       const lastRun = task.lastRecurrence || task.createdAt;
       let shouldSpawn = false;
       let nextDate = 0;
 
-      if (task.recurrence === 'daily') {
-         if (now - lastRun > oneDay) {
+      if (config.frequency === 'daily') {
+         const threshold = oneDay * config.interval;
+         if (now - lastRun > threshold) {
            shouldSpawn = true;
-           nextDate = now + oneDay;
+           nextDate = now + threshold;
          }
-      } else if (task.recurrence === 'weekly') {
-         if (now - lastRun > oneDay * 7) {
-           shouldSpawn = true;
-           nextDate = now + oneDay * 7;
+      } 
+      else if (config.frequency === 'weekly') {
+         // Check week interval first
+         const weekDiff = Math.floor((now - lastRun) / (oneDay * 7));
+         if (weekDiff >= config.interval) {
+           // If daysOfWeek specified, check if today is one of them
+           if (config.daysOfWeek && config.daysOfWeek.length > 0) {
+              const todayDay = new Date().getDay(); // 0-6
+              if (config.daysOfWeek.includes(todayDay)) {
+                 // Prevent spawning multiple times on the same day
+                 const lastRunDate = new Date(lastRun).toDateString();
+                 const todayDate = new Date().toDateString();
+                 if (lastRunDate !== todayDate) {
+                    shouldSpawn = true;
+                    nextDate = now; // Due today
+                 }
+              }
+           } else {
+              // Simple weekly repetition (exactly 7 days later)
+              shouldSpawn = true;
+              nextDate = now; 
+           }
          }
-      } else if (task.recurrence === 'monthly') {
-         if (now - lastRun > oneDay * 30) {
+      } 
+      else if (config.frequency === 'monthly') {
+         if (now - lastRun > oneDay * 30 * config.interval) {
            shouldSpawn = true;
-           nextDate = now + oneDay * 30;
+           nextDate = now + oneDay * 30 * config.interval;
          }
       }
 
@@ -194,9 +224,12 @@ export class AutomationService {
           updatedAt: now,
           recurrence: task.recurrence, 
           lastRecurrence: now,
-          startTime: undefined, 
-          endTime: undefined,
-          deadline: task.deadline ? task.deadline + (nextDate - lastRun) : undefined
+          // If task had specific start time (e.g. 19:00), keep time but change date to nextDate
+          startTime: task.startTime ? this.adjustDateKeepTime(task.startTime, nextDate) : undefined,
+          endTime: task.endTime ? this.adjustDateKeepTime(task.endTime, nextDate) : undefined,
+          deadline: task.deadline ? task.deadline + (nextDate - lastRun) : undefined,
+          // Don't copy external IDs
+          gCalEventId: undefined 
         };
         
         await StorageService.updateTask(task.id, { lastRecurrence: now });
@@ -209,6 +242,13 @@ export class AutomationService {
     }
 
     return newTasks;
+  }
+
+  private static adjustDateKeepTime(originalTimestamp: number, newDateTimestamp: number): number {
+    const original = new Date(originalTimestamp);
+    const newDate = new Date(newDateTimestamp);
+    newDate.setHours(original.getHours(), original.getMinutes(), 0, 0);
+    return newDate.getTime();
   }
 
   static formatDuration(ms: number): string {

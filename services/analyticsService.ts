@@ -27,23 +27,29 @@ export class AnalyticsService {
   }
 
   static getStatusDistribution(tasks: Task[]): { name: string; value: number; color: string }[] {
-    const counts = {
-      'backlog': 0,
-      'in-progress': 0,
-      'review': 0,
-      'done': 0
-    };
+    const counts: Record<string, number> = {};
 
     tasks.forEach(t => {
-      if (counts[t.status] !== undefined) counts[t.status]++;
+      const status = t.status || 'unknown';
+      counts[status] = (counts[status] || 0) + 1;
     });
+    
+    // Define standard colors, generate others randomly or hash
+    const getColor = (status: string) => {
+        switch(status) {
+            case 'done': return '#10b981';
+            case 'in-progress': return '#3b82f6';
+            case 'review': return '#f59e0b';
+            case 'backlog': return '#9ca3af';
+            default: return '#' + Math.floor(Math.random()*16777215).toString(16);
+        }
+    };
 
-    return [
-      { name: 'Done', value: counts['done'], color: '#10b981' },
-      { name: 'In Progress', value: counts['in-progress'], color: '#3b82f6' },
-      { name: 'Review', value: counts['review'], color: '#f59e0b' },
-      { name: 'Backlog', value: counts['backlog'], color: '#9ca3af' },
-    ].filter(i => i.value > 0);
+    return Object.entries(counts).map(([status, count]) => ({
+        name: status,
+        value: count,
+        color: getColor(status)
+    }));
   }
 
   static getUpcomingDeadlines(tasks: Task[], limit = 5): Task[] {

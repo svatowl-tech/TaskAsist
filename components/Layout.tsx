@@ -15,7 +15,8 @@ interface LayoutProps {
   onNewTask: () => void;
   onRefresh?: () => Promise<void>;
   onLogout?: () => void;
-  onToggleChat?: () => void; // Added for right swipe gesture
+  onToggleChat?: () => void;
+  onMagic?: () => void; // New Prop
 }
 
 export const Layout: React.FC<LayoutProps> = ({ 
@@ -30,7 +31,8 @@ export const Layout: React.FC<LayoutProps> = ({
   onNewTask,
   onRefresh,
   onLogout,
-  onToggleChat
+  onToggleChat,
+  onMagic
 }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pullY, setPullY] = useState(0);
@@ -164,7 +166,16 @@ export const Layout: React.FC<LayoutProps> = ({
           <h1 className="text-lg font-semibold tracking-tight">TaskAssist</h1>
         </div>
         
-        <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
+        <div className="p-4">
+           <button 
+             onClick={onMagic}
+             className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl p-3 flex items-center justify-center gap-2 font-bold shadow-lg hover:shadow-xl transition-all active:scale-95"
+           >
+             <span>🪄</span> Создать с ИИ
+           </button>
+        </div>
+        
+        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -271,16 +282,27 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
         </nav>
 
-        {/* FAB */}
-        <button
-          onClick={() => {
-            if (navigator.vibrate) navigator.vibrate(10);
-            onNewTask();
-          }}
-          className="lg:hidden fixed bottom-20 right-4 w-12 h-12 bg-primary text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-40 active:scale-95 transition-transform"
-        >
-          +
-        </button>
+        {/* FAB Group */}
+        <div className="lg:hidden fixed bottom-20 right-4 flex flex-col gap-3 z-40">
+            <button
+              onClick={() => {
+                if (navigator.vibrate) navigator.vibrate(10);
+                if (onMagic) onMagic();
+              }}
+              className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-full shadow-lg flex items-center justify-center text-xl active:scale-95 transition-transform"
+            >
+              🪄
+            </button>
+            <button
+              onClick={() => {
+                if (navigator.vibrate) navigator.vibrate(10);
+                onNewTask();
+              }}
+              className="w-12 h-12 bg-primary text-white rounded-full shadow-lg flex items-center justify-center text-2xl active:scale-95 transition-transform"
+            >
+              +
+            </button>
+        </div>
       </div>
     </div>
   );

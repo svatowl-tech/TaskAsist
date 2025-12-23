@@ -1,8 +1,8 @@
 
-import { Task, Note, Goal, AutomationRule, ProjectTemplate, CopilotMemory, BackupSnapshot } from '../types';
+import { Task, Note, Goal, AutomationRule, ProjectTemplate, CopilotMemory, BackupSnapshot, BoardColumn, Board, GlobalEvent } from '../types';
 
 const DB_NAME = 'TaskAssistDB';
-const DB_VERSION = 6; // Incremented for Backups
+const DB_VERSION = 9; // Incremented for Global Events
 const STORES = {
   TASKS: 'tasks',
   NOTES: 'notes',
@@ -11,7 +11,10 @@ const STORES = {
   TEMPLATES: 'templates',
   MEMORY: 'memory',
   USER: 'user',
-  BACKUPS: 'backups'
+  BACKUPS: 'backups',
+  COLUMNS: 'columns',
+  BOARDS: 'boards',
+  GLOBAL_EVENTS: 'global_events' // New store
 };
 
 // LRU Cache Implementation
@@ -83,6 +86,9 @@ export class StorageService {
         if (!db.objectStoreNames.contains(STORES.MEMORY)) db.createObjectStore(STORES.MEMORY, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(STORES.USER)) db.createObjectStore(STORES.USER, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(STORES.BACKUPS)) db.createObjectStore(STORES.BACKUPS, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(STORES.COLUMNS)) db.createObjectStore(STORES.COLUMNS, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(STORES.BOARDS)) db.createObjectStore(STORES.BOARDS, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(STORES.GLOBAL_EVENTS)) db.createObjectStore(STORES.GLOBAL_EVENTS, { keyPath: 'id' });
       };
     });
   }
@@ -190,8 +196,7 @@ export class StorageService {
     });
   }
 
-  // --- Other Stores (Goals, Automations, Templates, Memory) ---
-  // Simplified for brevity, assume similar patterns...
+  // --- Other Stores (Goals, Automations, Templates, Memory, Columns, Boards, GlobalEvents) ---
   static async getGoals(): Promise<Goal[]> { return this.getAll(STORES.GOALS); }
   static async addGoal(goal: Goal): Promise<void> { return this.add(STORES.GOALS, goal); }
   static async deleteGoal(id: string): Promise<void> { return this.delete(STORES.GOALS, id); }
@@ -202,6 +207,23 @@ export class StorageService {
 
   static async getTemplates(): Promise<ProjectTemplate[]> { return this.getAll(STORES.TEMPLATES); }
   static async addTemplate(tpl: ProjectTemplate): Promise<void> { return this.add(STORES.TEMPLATES, tpl); }
+
+  static async getColumns(): Promise<BoardColumn[]> { return this.getAll(STORES.COLUMNS); } // Legacy
+  
+  static async getBoards(): Promise<Board[]> { return this.getAll(STORES.BOARDS); }
+  static async saveBoard(board: Board): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const store = this.getStore(STORES.BOARDS, 'readwrite');
+        const request = store.put(board);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+  }
+  static async deleteBoard(id: string): Promise<void> { return this.delete(STORES.BOARDS, id); }
+
+  static async getGlobalEvents(): Promise<GlobalEvent[]> { return this.getAll(STORES.GLOBAL_EVENTS); }
+  static async addGlobalEvent(event: GlobalEvent): Promise<void> { return this.add(STORES.GLOBAL_EVENTS, event); }
+  static async deleteGlobalEvent(id: string): Promise<void> { return this.delete(STORES.GLOBAL_EVENTS, id); }
 
   static async getMemory(): Promise<CopilotMemory[]> { return this.getAll(STORES.MEMORY); }
   static async setMemory(key: string, value: any): Promise<void> {
@@ -270,7 +292,7 @@ export class StorageService {
   private static async add(storeName: string, item: any): Promise<void> {
     return new Promise((resolve, reject) => {
       const store = this.getStore(storeName, 'readwrite');
-      const request = store.add(item);
+      const request = store.put(item); // Use PUT to support both add and update based on keyPath
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });

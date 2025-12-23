@@ -59,8 +59,8 @@ export class AuthService {
     sessionStorage.setItem('auth_state', state);
 
     if (provider === 'google') {
-      // Scopes: Drive AppData (hidden folder), Profile, Email
-      const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email');
+      // Scopes: Drive AppData (hidden folder), Profile, Email, AND Google Calendar Events
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.events');
       url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=token&scope=${scope}&state=${state}&prompt=select_account`;
     } else if (provider === 'yandex') {
       url = `https://oauth.yandex.com/authorize?response_type=token&client_id=${YANDEX_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&state=${state}`;

@@ -1,7 +1,21 @@
 
-import { AppState, Task, Note, Goal, AutomationRule, ProjectTemplate, CopilotMemory, User, AppSettings } from '../types';
+import { AppState, Task, Note, Goal, AutomationRule, ProjectTemplate, CopilotMemory, User, AppSettings, BoardColumn, Board, GlobalEvent } from '../types';
 
 type Listener = (state: AppState) => void;
+
+// Default columns for new boards
+export const DEFAULT_COLUMNS: BoardColumn[] = [
+  { id: 'backlog', title: 'Бэклог', order: 0 },
+  { id: 'in-progress', title: 'В работе', order: 1 },
+  { id: 'review', title: 'Проверка', order: 2 },
+  { id: 'done', title: 'Готово', order: 3 },
+];
+
+const DEFAULT_BOARD: Board = {
+  id: 'default-board',
+  title: 'Главная',
+  columns: DEFAULT_COLUMNS
+};
 
 const INITIAL_STATE: AppState = {
   tasks: [],
@@ -10,8 +24,11 @@ const INITIAL_STATE: AppState = {
   automations: [],
   templates: [],
   memory: [],
+  boards: [DEFAULT_BOARD],
+  activeBoardId: 'default-board',
+  globalEvents: [],
   user: null,
-  settings: { theme: 'dark' },
+  settings: { theme: 'dark', workSchedule: { type: 'standard', workDays: [1,2,3,4,5] } },
   isLoading: true,
 };
 
@@ -63,6 +80,28 @@ class Store {
   deleteTask(id: string) {
     this.setState(prev => ({
       tasks: prev.tasks.filter(t => t.id !== id)
+    }));
+  }
+  
+  setActiveBoard(id: string) {
+    this.setState({ activeBoardId: id });
+  }
+
+  updateBoard(board: Board) {
+    this.setState(prev => ({
+      boards: prev.boards.map(b => b.id === board.id ? board : b)
+    }));
+  }
+  
+  addGlobalEvent(event: GlobalEvent) {
+    this.setState(prev => ({
+        globalEvents: [...prev.globalEvents, event]
+    }));
+  }
+  
+  deleteGlobalEvent(id: string) {
+    this.setState(prev => ({
+        globalEvents: prev.globalEvents.filter(e => e.id !== id)
     }));
   }
 }

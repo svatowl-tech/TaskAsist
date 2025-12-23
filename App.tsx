@@ -13,6 +13,7 @@ const ChatAssistant = React.lazy(() => import('./components/ChatAssistant').then
 const SettingsView = React.lazy(() => import('./components/SettingsView').then(m => ({ default: m.SettingsView })));
 
 import { TaskModal } from './components/TaskModal';
+import { MagicInput } from './components/MagicInput'; // New Import
 import { Skeleton } from './components/Skeleton';
 import { CommandPalette } from './components/CommandPalette';
 import { PomodoroTimer } from './components/PomodoroTimer'; // Import Timer
@@ -24,8 +25,9 @@ import { AutomationService } from './services/automationService';
 import { CopilotService } from './services/copilotService';
 import { DeveloperApiService } from './services/developerApiService';
 import { MonitoringService } from './services/monitoringService'; // Monitoring
-import { Task, Note, AppState, ViewMode, TaskStatus, User, AppSettings, Goal, AutomationRule, ProjectTemplate } from './types';
-import { appStore } from './lib/store';
+import { Task, Note, AppState, ViewMode, TaskStatus, User, AppSettings, Goal, AutomationRule, ProjectTemplate, Board, BoardColumn } from './types';
+import { appStore, DEFAULT_COLUMNS } from './lib/store';
+import { AiIntentResult } from './services/aiService';
 
 // Test Runner Imports
 import { runner } from './lib/testRunner';
@@ -59,6 +61,7 @@ const App: React.FC = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isMagicOpen, setIsMagicOpen] = useState(false); // Magic Input State
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   
   // Test State
@@ -157,7 +160,30 @@ const App: React.FC = () => {
     const automations = await StorageService.getAutomations();
     const templates = await StorageService.getTemplates();
     const memory = await StorageService.getMemory();
+    const legacyColumns = await StorageService.getColumns();
+    const loadedBoards = await StorageService.getBoards();
+    const globalEvents = await StorageService.getGlobalEvents();
     
+    // --- Boards Migration & Init ---
+    let finalBoards: Board[] = [];
+    let defaultBoardId = 'default-board';
+
+    if (loadedBoards.length > 0) {
+        finalBoards = loadedBoards;
+        defaultBoardId = loadedBoards[0].id;
+    } else {
+        // Create default board, optionally using legacy columns if they exist
+        const columns = legacyColumns.length > 0 ? legacyColumns : DEFAULT_COLUMNS;
+        const defaultBoard: Board = {
+            id: defaultBoardId,
+            title: 'Главная',
+            columns: columns
+        };
+        finalBoards = [defaultBoard];
+        await StorageService.saveBoard(defaultBoard);
+    }
+
+    // --- Task Processing ---
     const newRecurringTasks = await AutomationService.checkRecurringTasks(tasks);
     let finalTasks = tasks;
     if (newRecurringTasks.length > 0) {
@@ -171,10 +197,22 @@ const App: React.FC = () => {
       order: t.order || 0,
       eventType: t.eventType || 'task',
       color: t.color || '#3b82f6',
-      recurrence: t.recurrence || 'none'
+      recurrence: t.recurrence || 'none',
+      boardId: t.boardId || defaultBoardId // Migrate old tasks to default board
     }));
     measure.finish();
-    return { tasks: finalTasks, notes, goals, automations, templates, memory };
+    
+    return { 
+        tasks: finalTasks, 
+        notes, 
+        goals, 
+        automations, 
+        templates, 
+        memory, 
+        boards: finalBoards,
+        activeBoardId: defaultBoardId,
+        globalEvents
+    };
   };
 
   useEffect(() => {
@@ -279,6 +317,14 @@ const App: React.FC = () => {
              if (newData.automations) await Promise.all(newData.automations.map(a => StorageService.addAutomation(a)));
              if (newData.templates) await Promise.all(newData.templates.map(t => StorageService.addTemplate(t)));
              if (newData.memory) await Promise.all(newData.memory.map(m => StorageService.setMemory(m.key, m.value)));
+             
+             // Sync boards
+             if (newData.boards) await Promise.all(newData.boards.map(b => StorageService.saveBoard(b)));
+             // Sync Global Events
+             if (newData.globalEvents) {
+                 await Promise.all(localState.globalEvents.map(e => StorageService.deleteGlobalEvent(e.id)));
+                 await Promise.all(newData.globalEvents.map(e => StorageService.addGlobalEvent(e)));
+             }
 
              appStore.setState({ 
                tasks: newData.tasks, 
@@ -287,6 +333,9 @@ const App: React.FC = () => {
                automations: newData.automations || [],
                templates: newData.templates || [],
                memory: newData.memory || [],
+               boards: newData.boards || localState.boards,
+               activeBoardId: newData.activeBoardId || localState.activeBoardId,
+               globalEvents: newData.globalEvents || [],
                settings: newData.settings || { theme: 'dark' }, 
                lastSynced: Date.now() 
              });
@@ -332,7 +381,7 @@ const App: React.FC = () => {
     if (!state.isLoading && state.user) {
        triggerCloudSync(state);
     }
-  }, [state.tasks, state.notes, state.goals, state.settings]);
+  }, [state.tasks, state.notes, state.goals, state.settings, state.boards, state.globalEvents]);
 
 
   // --- Handlers ---
@@ -364,6 +413,9 @@ const App: React.FC = () => {
           await StorageService.updateTask(updatedTask.id, updatedTask);
           appStore.updateTask(updatedTask);
         } else {
+          // If no boardId provided (e.g. from quick add), use active board
+          const targetBoardId = taskData.boardId || state.activeBoardId || state.boards[0].id;
+          
           let newTask: Task = {
             id: crypto.randomUUID(),
             title: taskData.title || 'Untitled',
@@ -385,7 +437,8 @@ const App: React.FC = () => {
             createdAt: Date.now(),
             updatedAt: Date.now(),
             estimatedDuration: taskData.estimatedDuration || 0,
-            dependencies: taskData.dependencies || []
+            dependencies: taskData.dependencies || [],
+            boardId: targetBoardId
           };
           
           newTask = await AutomationService.evaluateRules(newTask, null, state.automations);
@@ -456,6 +509,8 @@ const App: React.FC = () => {
     if (data.tasks) await Promise.all(data.tasks.map(t => StorageService.addTask(t)));
     if (data.notes) await Promise.all(data.notes.map(n => StorageService.addNote(n)));
     if (data.goals) await Promise.all(data.goals.map(g => StorageService.addGoal(g)));
+    if (data.boards) await Promise.all(data.boards.map(b => StorageService.saveBoard(b)));
+    if (data.globalEvents) await Promise.all(data.globalEvents.map(e => StorageService.addGlobalEvent(e)));
     
     await refreshData();
   };
@@ -464,7 +519,7 @@ const App: React.FC = () => {
     const dbs = await window.indexedDB.databases();
     dbs.forEach(db => window.indexedDB.deleteDatabase(db.name!));
     appStore.setState({
-      tasks: [], notes: [], goals: [], automations: [], templates: [], memory: [],
+      tasks: [], notes: [], goals: [], automations: [], templates: [], memory: [], boards: [], globalEvents: [],
       user: null, settings: { theme: 'dark' }, isLoading: false
     });
   };
@@ -482,6 +537,61 @@ const App: React.FC = () => {
     const updatedTask = { ...task, timeLogs: newLogs };
     await StorageService.updateTask(taskId, updatedTask);
     appStore.updateTask(updatedTask);
+  };
+
+  // --- Magic Input Result Handler ---
+  const handleMagicResult = async (result: AiIntentResult) => {
+      if (result.type === 'project') {
+          // Create New Board
+          const boardId = crypto.randomUUID();
+          const columns: BoardColumn[] = result.data.columns.map((title: string, i: number) => ({
+              id: title.toLowerCase().replace(/\s/g, '_'),
+              title,
+              order: i
+          }));
+          const newBoard: Board = {
+              id: boardId,
+              title: result.data.title,
+              columns
+          };
+          
+          await StorageService.saveBoard(newBoard);
+          appStore.updateBoard(newBoard);
+          appStore.setActiveBoard(boardId); // Switch to new board
+
+          // Create Tasks for Board
+          for (const t of result.data.tasks) {
+              const colId = columns.find(c => c.title === t.column)?.id || columns[0].id;
+              const task: Task = {
+                  id: crypto.randomUUID(),
+                  title: t.title,
+                  description: t.description,
+                  status: colId,
+                  tags: [],
+                  completed: false,
+                  boardId: boardId,
+                  createdAt: Date.now(),
+                  updatedAt: Date.now(),
+                  order: Date.now()
+              };
+              await StorageService.addTask(task);
+              appStore.addTask(task);
+          }
+          setViewMode('board');
+      } 
+      else if (result.type === 'task') {
+          // Create Single Task
+          const taskData = result.data;
+          await handleSaveTask({
+              title: taskData.title,
+              description: taskData.description,
+              startTime: taskData.startTime ? new Date(taskData.startTime).getTime() : undefined,
+              deadline: taskData.deadline ? new Date(taskData.deadline).getTime() : undefined,
+              tags: taskData.tags || [],
+              status: 'backlog',
+              estimatedDuration: taskData.durationMinutes
+          });
+      }
   };
 
   if (state.isLoading) {
@@ -547,6 +657,7 @@ const App: React.FC = () => {
         onRefresh={refreshData}
         onLogout={handleLogout}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
+        onMagic={() => setIsMagicOpen(true)}
       >
         {briefing && (
           <div className="mb-6 mx-auto max-w-4xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-4 rounded-xl shadow-lg relative animate-in fade-in slide-in-from-top-4">
@@ -653,7 +764,7 @@ const App: React.FC = () => {
       </Layout>
 
       <PomodoroTimer 
-        activeTask={editingTask} // Ideally allow picking any task, but for now linking to edited or let user pick via other UI
+        activeTask={editingTask} 
         onUpdateTaskLog={handleUpdateTaskLog}
       />
 
@@ -669,6 +780,13 @@ const App: React.FC = () => {
         aiModel={state.settings.aiModel}
       />
 
+      <MagicInput 
+        isOpen={isMagicOpen}
+        onClose={() => setIsMagicOpen(false)}
+        appState={state}
+        onResult={handleMagicResult}
+      />
+
       <Suspense fallback={null}>
         <ChatAssistant 
           appState={state}
@@ -676,7 +794,18 @@ const App: React.FC = () => {
           onToggle={() => setIsChatOpen(!isChatOpen)}
           onUpdateSettings={(key, tone, voice) => handleUpdateSettings({ openRouterApiKey: key, assistantTone: tone, voiceEnabled: voice })}
           onAddTask={async (t) => {
-            const nt: any = { ...t, id: crypto.randomUUID(), createdAt: Date.now(), updatedAt: Date.now(), tags: [], eventType: 'task', color: '#3b82f6', completed: false, order: Date.now() };
+            const nt: any = { 
+                ...t, 
+                id: crypto.randomUUID(), 
+                createdAt: Date.now(), 
+                updatedAt: Date.now(), 
+                tags: [], 
+                eventType: 'task', 
+                color: '#3b82f6', 
+                completed: false, 
+                order: Date.now(),
+                boardId: state.activeBoardId || state.boards[0]?.id
+            };
             const processed = await AutomationService.evaluateRules(nt, null, state.automations);
             await StorageService.addTask(processed);
             appStore.addTask(processed);

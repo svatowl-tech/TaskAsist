@@ -1,7 +1,8 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Note, NoteType, ChecklistItem, AppState } from '../types';
 import { AiService } from '../services/aiService';
+import { ExportService } from '../services/exportService';
 
 interface NotesViewProps {
   notes: Note[];
@@ -29,6 +30,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   
+  const editorRef = useRef<HTMLDivElement>(null);
+
   // Memoize filtered notes
   const filteredNotes = useMemo(() => {
     return notes.filter(n => {
@@ -134,6 +137,12 @@ export const NotesView: React.FC<NotesViewProps> = ({
     }
   };
 
+  const handleShareImage = () => {
+    if (editorRef.current) {
+        ExportService.shareAsImage(editorRef.current, `note-${selectedNote?.title.slice(0, 10) || 'share'}.png`);
+    }
+  };
+
   // --- Renderers ---
 
   return (
@@ -227,7 +236,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
         {selectedNote ? (
           <>
             {/* Editor Toolbar */}
-            <div className="h-14 flex items-center justify-between px-4 border-b border-border">
+            <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-bg-main">
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setSelectedNoteId(null)}
@@ -278,6 +287,13 @@ export const NotesView: React.FC<NotesViewProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleShareImage} 
+                  className="p-2 text-text-muted hover:text-primary rounded-[6px]"
+                  title="Поделиться картинкой"
+                >
+                  📸
+                </button>
                 {selectedNote.type === 'text' && (
                    <button 
                     onClick={() => onCreateTask(selectedNote.title, selectedNote.content)}
@@ -299,7 +315,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
             </div>
 
             {/* Editor Content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div ref={editorRef} className="flex-1 overflow-y-auto p-6 bg-bg-surface">
               <input
                 type="text"
                 value={selectedNote.title}

@@ -1,5 +1,5 @@
 
-export type TaskStatus = 'backlog' | 'in-progress' | 'review' | 'done';
+export type TaskStatus = string; // Changed from union to string for dynamic board columns
 export type EventType = 'task' | 'meeting' | 'personal' | 'reminder';
 export type NoteType = 'text' | 'checklist';
 
@@ -8,7 +8,24 @@ export interface TimeLog {
   end?: number;
 }
 
-export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly';
+// Updated Recurrence to object for complex rules
+export interface RecurrenceConfig {
+  frequency: 'none' | 'daily' | 'weekly' | 'monthly';
+  interval: number; // e.g. every 1 week
+  daysOfWeek?: number[]; // 0 = Sunday, 1 = Monday, etc.
+}
+
+export interface BoardColumn {
+  id: string;
+  title: string;
+  order: number;
+}
+
+export interface Board {
+  id: string;
+  title: string;
+  columns: BoardColumn[];
+}
 
 export interface Task {
   id: string;
@@ -23,6 +40,9 @@ export interface Task {
   createdAt: number;
   updatedAt: number;
   
+  // Board Association
+  boardId?: string; 
+
   // Calendar & Event Properties
   startTime?: number; // timestamp
   endTime?: number;   // timestamp
@@ -35,8 +55,11 @@ export interface Task {
 
   // New Smart Features
   timeLogs?: TimeLog[];
-  recurrence?: RecurrenceType;
+  recurrence?: RecurrenceConfig | string; // Backward compatibility with string
   lastRecurrence?: number; // timestamp of last spawn
+  
+  // Google Calendar Integration
+  gCalEventId?: string;
   
   // Advanced Analytics
   estimatedDuration?: number; // minutes
@@ -140,12 +163,42 @@ export interface CopilotMemory {
   updatedAt: number;
 }
 
+// --- NEW SCHEDULING TYPES ---
+
+export type GlobalEventType = 'holiday' | 'birthday' | 'vacation' | 'other';
+
+export interface GlobalEvent {
+  id: string;
+  title: string;
+  date: number; // timestamp
+  type: GlobalEventType;
+  isRecurringYearly: boolean; // For birthdays/fixed holidays
+  color?: string;
+}
+
+export interface WorkSchedule {
+  type: 'standard' | 'shift' | 'flexible';
+  
+  // For 'standard' (e.g. 5/2)
+  workDays?: number[]; // [1,2,3,4,5] for Mon-Fri
+  
+  // For 'shift' (e.g. 2/2, 3/3)
+  shiftConfig?: {
+    workCount: number; // 2
+    offCount: number;  // 2
+    startDate: number; // Reference date to calculate cycle
+  };
+}
+
 export interface AppSettings {
   openRouterApiKey?: string;
   aiModel?: string;
   theme?: ThemeMode;
   reminderDefaultMinutes?: number;
   dashboardLayout?: DashboardWidgetConfig[];
+  
+  // Schedule Config
+  workSchedule?: WorkSchedule;
   
   // Sync & Backup
   githubToken?: string;
@@ -176,11 +229,14 @@ export interface AppState {
   goals: Goal[];
   automations: AutomationRule[];
   templates: ProjectTemplate[];
-  memory: CopilotMemory[]; // Long term memory
+  memory: CopilotMemory[];
+  boards: Board[]; 
+  activeBoardId: string | null;
+  globalEvents: GlobalEvent[]; // New Store for holidays etc
   user: User | null;
   settings: AppSettings;
   isLoading: boolean;
-  lastSynced?: number; // Timestamp of last successful sync
+  lastSynced?: number; 
 }
 
 export type ViewMode = 'tasks' | 'board' | 'calendar' | 'notes' | 'analytics' | 'automation' | 'settings';

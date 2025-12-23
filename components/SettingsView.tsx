@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { AppSettings, User, AppState, BackupSnapshot } from '../types';
+import { AppSettings, User, AppState, BackupSnapshot, WorkSchedule, GlobalEvent } from '../types';
 import { AuthService } from '../services/authService';
 import { StorageService } from '../services/storageService';
 import { ExportService } from '../services/exportService';
 import { AVAILABLE_MODELS } from '../services/aiService';
 import { LocalAiService } from '../services/localAiService';
 import { DeveloperApiService } from '../services/developerApiService';
+import { appStore } from '../lib/store';
 
 interface SettingsViewProps {
   user: User | null;
@@ -28,7 +29,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onClearData,
   onLogout
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'sync' | 'backup' | 'ai' | 'dev'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'schedule' | 'sync' | 'backup' | 'ai' | 'dev'>('general');
   const [backups, setBackups] = useState<BackupSnapshot[]>([]);
   const [encryptionPwd, setEncryptionPwd] = useState(settings.encryptionPassword || '');
   const [githubToken, setGithubToken] = useState(settings.githubToken || '');
@@ -36,6 +37,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Local AI State
   const [downloadProgress, setDownloadProgress] = useState<string>('');
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Schedule State
+  const [scheduleConfig, setScheduleConfig] = useState<WorkSchedule>(settings.workSchedule || { type: 'standard', workDays: [1,2,3,4,5] });
+  const [newEvent, setNewEvent] = useState<{title: string, date: string, type: string, recurring: boolean}>({
+      title: '', date: '', type: 'holiday', recurring: false
+  });
 
   useEffect(() => {
     if (activeTab === 'backup') {
@@ -70,6 +77,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     alert('Настройки безопасности сохранены');
   };
 
+  const saveSchedule = () => {
+      onUpdateSettings({ workSchedule: scheduleConfig });
+      alert('Расписание сохранено');
+  };
+
+  const handleAddGlobalEvent = async () => {
+      if (!newEvent.title || !newEvent.date) return;
+      const event: GlobalEvent = {
+          id: crypto.randomUUID(),
+          title: newEvent.title,
+          date: new Date(newEvent.date).getTime(),
+          type: newEvent.type as any,
+          isRecurringYearly: newEvent.recurring
+      };
+      await StorageService.addGlobalEvent(event);
+      appStore.addGlobalEvent(event);
+      setNewEvent({ title: '', date: '', type: 'holiday', recurring: false });
+  };
+
+  const handleDeleteGlobalEvent = async (id: string) => {
+      await StorageService.deleteGlobalEvent(id);
+      appStore.deleteGlobalEvent(id);
+  };
+
   const initLocalModel = async () => {
     if (!LocalAiService.isSupported()) {
       alert("Ваш браузер не поддерживает WebGPU.");
@@ -94,37 +125,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     <div className="p-4 lg:p-8 max-w-4xl mx-auto min-h-screen pb-20">
       <h2 className="text-3xl font-bold text-text-main mb-6">Настройки</h2>
       
-      <div className="flex gap-4 mb-8 overflow-x-auto pb-2 border-b border-border">
-        <button 
-          onClick={() => setActiveTab('general')}
-          className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'general' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}
-        >
-          Общие
-        </button>
-        <button 
-          onClick={() => setActiveTab('ai')}
-          className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'ai' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}
-        >
-          AI и Модели
-        </button>
-        <button 
-          onClick={() => setActiveTab('sync')}
-          className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'sync' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}
-        >
-          Синхронизация
-        </button>
-        <button 
-          onClick={() => setActiveTab('backup')}
-          className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'backup' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}
-        >
-          Резервные копии
-        </button>
-        <button 
-          onClick={() => setActiveTab('dev')}
-          className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'dev' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}
-        >
-          Для разработчиков
-        </button>
+      <div className="flex gap-4 mb-8 overflow-x-auto pb-2 border-b border-border no-scrollbar">
+        <button onClick={() => setActiveTab('general')} className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'general' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}>Общие</button>
+        <button onClick={() => setActiveTab('schedule')} className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'schedule' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}>Расписание и События</button>
+        <button onClick={() => setActiveTab('ai')} className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'ai' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}>AI</button>
+        <button onClick={() => setActiveTab('sync')} className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'sync' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}>Синхронизация</button>
+        <button onClick={() => setActiveTab('backup')} className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'backup' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}>Бэкап</button>
+        <button onClick={() => setActiveTab('dev')} className={`pb-2 px-2 whitespace-nowrap ${activeTab === 'dev' ? 'border-b-2 border-primary font-bold text-primary' : 'text-text-muted'}`}>Dev</button>
       </div>
 
       {activeTab === 'general' && (
@@ -154,9 +161,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                  <button onClick={() => AuthService.login('local')} className="btn-secondary w-full justify-center">
                    Войти как Гость (Локально)
                  </button>
-                 <p className="text-xs text-text-muted text-center mt-2">
-                   * Для Google Drive требуется настройка API ключей в коде. Режим "Гость" работает сразу.
-                 </p>
               </div>
             )}
           </section>
@@ -183,6 +187,148 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </section>
         </div>
+      )}
+
+      {activeTab === 'schedule' && (
+          <div className="space-y-6 animate-in fade-in">
+              <section className="card p-6">
+                  <h3 className="text-lg font-semibold mb-4">Рабочий график</h3>
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-sm font-medium text-text-muted mb-2">Тип графика</label>
+                          <select 
+                            value={scheduleConfig.type} 
+                            onChange={(e) => setScheduleConfig({...scheduleConfig, type: e.target.value as any})}
+                            className="input-field"
+                          >
+                              <option value="standard">Стандартный (по дням недели)</option>
+                              <option value="shift">Сменный (2/2, 3/3 и т.д.)</option>
+                          </select>
+                      </div>
+
+                      {scheduleConfig.type === 'standard' && (
+                          <div>
+                              <label className="block text-sm font-medium text-text-muted mb-2">Рабочие дни</label>
+                              <div className="flex gap-2 flex-wrap">
+                                  {['Вс','Пн','Вт','Ср','Чт','Пт','Сб'].map((day, idx) => (
+                                      <button 
+                                        key={idx}
+                                        onClick={() => {
+                                            const current = scheduleConfig.workDays || [];
+                                            const newDays = current.includes(idx) ? current.filter(d => d !== idx) : [...current, idx];
+                                            setScheduleConfig({...scheduleConfig, workDays: newDays});
+                                        }}
+                                        className={`w-10 h-10 rounded-full border ${scheduleConfig.workDays?.includes(idx) ? 'bg-primary text-white border-primary' : 'bg-bg-surface border-border'}`}
+                                      >
+                                          {day}
+                                      </button>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+
+                      {scheduleConfig.type === 'shift' && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                  <label className="block text-sm font-medium text-text-muted">Рабочих дней</label>
+                                  <input 
+                                    type="number" 
+                                    value={scheduleConfig.shiftConfig?.workCount || 2}
+                                    onChange={e => setScheduleConfig({
+                                        ...scheduleConfig, 
+                                        shiftConfig: { 
+                                            ...scheduleConfig.shiftConfig || {startDate: Date.now(), offCount: 2, workCount: 2}, 
+                                            workCount: parseInt(e.target.value) 
+                                        }
+                                    })}
+                                    className="input-field"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-sm font-medium text-text-muted">Выходных дней</label>
+                                  <input 
+                                    type="number" 
+                                    value={scheduleConfig.shiftConfig?.offCount || 2}
+                                    onChange={e => setScheduleConfig({
+                                        ...scheduleConfig, 
+                                        shiftConfig: { 
+                                            ...scheduleConfig.shiftConfig || {startDate: Date.now(), offCount: 2, workCount: 2}, 
+                                            offCount: parseInt(e.target.value) 
+                                        }
+                                    })}
+                                    className="input-field"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-sm font-medium text-text-muted">Дата начала первой смены</label>
+                                  <input 
+                                    type="date" 
+                                    value={scheduleConfig.shiftConfig?.startDate ? new Date(scheduleConfig.shiftConfig.startDate).toISOString().split('T')[0] : ''}
+                                    onChange={e => setScheduleConfig({
+                                        ...scheduleConfig, 
+                                        shiftConfig: { 
+                                            ...scheduleConfig.shiftConfig || {startDate: Date.now(), offCount: 2, workCount: 2}, 
+                                            startDate: new Date(e.target.value).getTime() 
+                                        }
+                                    })}
+                                    className="input-field"
+                                  />
+                              </div>
+                          </div>
+                      )}
+                      
+                      <button onClick={saveSchedule} className="btn-primary">Сохранить график</button>
+                  </div>
+              </section>
+
+              <section className="card p-6">
+                  <h3 className="text-lg font-semibold mb-4">Глобальные события (Праздники, Отпуск)</h3>
+                  
+                  {/* List */}
+                  <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
+                      {appState.globalEvents.map(event => (
+                          <div key={event.id} className="flex justify-between items-center p-3 bg-bg-panel rounded-lg">
+                              <div>
+                                  <span className="font-medium mr-2">{event.title}</span>
+                                  <span className="text-xs px-2 py-0.5 rounded bg-bg-surface text-text-muted border border-border">
+                                      {new Date(event.date).toLocaleDateString()} {event.isRecurringYearly ? '(Ежегодно)' : ''}
+                                  </span>
+                              </div>
+                              <button onClick={() => handleDeleteGlobalEvent(event.id)} className="text-error hover:underline text-sm">Удалить</button>
+                          </div>
+                      ))}
+                      {appState.globalEvents.length === 0 && <p className="text-text-muted text-sm">Список пуст.</p>}
+                  </div>
+
+                  {/* Add Form */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end bg-bg-panel p-4 rounded-lg">
+                      <div className="md:col-span-1">
+                          <label className="text-xs mb-1 block">Название</label>
+                          <input type="text" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="input-field h-9 text-sm" placeholder="День рождения..." />
+                      </div>
+                      <div>
+                          <label className="text-xs mb-1 block">Дата</label>
+                          <input type="date" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} className="input-field h-9 text-sm" />
+                      </div>
+                      <div>
+                          <label className="text-xs mb-1 block">Тип</label>
+                          <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value})} className="input-field h-9 text-sm">
+                              <option value="holiday">Праздник</option>
+                              <option value="birthday">День рождения</option>
+                              <option value="vacation">Отпуск</option>
+                              <option value="other">Другое</option>
+                          </select>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                          <input type="checkbox" checked={newEvent.recurring} onChange={e => setNewEvent({...newEvent, recurring: e.target.checked})} id="recur" />
+                          <label htmlFor="recur" className="text-sm cursor-pointer">Каждый год</label>
+                      </div>
+                      <div className="md:col-span-4 flex justify-end">
+                          <button onClick={handleAddGlobalEvent} className="btn-secondary text-sm">Добавить событие</button>
+                      </div>
+                  </div>
+              </section>
+          </div>
       )}
       
       {activeTab === 'ai' && (

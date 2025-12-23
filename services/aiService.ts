@@ -21,6 +21,12 @@ export interface ToolCall {
   arguments: any;
 }
 
+export interface AiIntentResult {
+  type: 'project' | 'task';
+  data: any;
+  reasoning: string;
+}
+
 export class AiService {
   
   private static async getWeatherContext(): Promise<string> {
@@ -248,5 +254,69 @@ export class AiService {
       const items: string[] = JSON.parse(clean);
       return items.map(text => ({ id: crypto.randomUUID(), text, completed: false }));
     } catch (e) { return []; }
+  }
+
+  // --- Magic Button Logic ---
+
+  static async analyzeUserIntent(apiKey: string, text: string, model?: string): Promise<AiIntentResult> {
+    const now = new Date();
+    const prompt = `
+      Ты — интеллектуальный диспетчер задач. Твоя цель — проанализировать запрос пользователя и структурировать его.
+      Текущее время: ${now.toISOString()}.
+
+      Критерии:
+      1. Если текст описывает сложный проект, глобальную цель, свадьбу, переезд или большую тему с подзадачами — это PROJECT.
+      2. Если текст описывает конкретное действие, напоминание, встречу или простую задачу — это TASK.
+
+      Ответь СТРОГО в формате JSON без markdown обертки.
+
+      Формат для PROJECT:
+      {
+        "type": "project",
+        "data": {
+           "title": "Название доски",
+           "columns": ["To Do", "In Progress", "Done"], // Можешь адаптировать названия колонок под тему
+           "tasks": [
+              { "title": "Задача 1", "column": "To Do", "description": "..." },
+              { "title": "Задача 2", "column": "To Do" }
+           ]
+        },
+        "reasoning": "Краткое объяснение"
+      }
+
+      Формат для TASK:
+      {
+        "type": "task",
+        "data": {
+           "title": "Название задачи",
+           "description": "Детали",
+           "startTime": "ISO String или null (если указано время)",
+           "deadline": "ISO String или null (если указан дедлайн)",
+           "durationMinutes": 60, // оценка
+           "tags": ["tag1"]
+        },
+        "reasoning": "Краткое объяснение"
+      }
+
+      Запрос: "${text}"
+    `;
+
+    const messages = [{ role: "user", content: prompt }];
+    
+    // Force Cloud AI for this complex logic usually, unless model supports JSON well
+    const response = await this.sendMessage(apiKey, messages, "", model);
+    
+    try {
+        let clean = response.content.trim();
+        // Remove markdown code blocks if present
+        if (clean.startsWith('```json')) clean = clean.replace(/^```json/, '').replace(/```$/, '');
+        if (clean.startsWith('```')) clean = clean.replace(/^```/, '').replace(/```$/, '');
+        
+        const result = JSON.parse(clean);
+        return result as AiIntentResult;
+    } catch (e) {
+        console.error("AI JSON Parse Error", e);
+        throw new Error("Не удалось распознать структуру ответа ИИ");
+    }
   }
 }
